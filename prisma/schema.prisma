@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  pm
+  designer
+  engineer
+  consultant
+}
+
+enum ApprovalStatus {
+  preparing
+  submitted
+  comments
+  approved
+}
+
+enum DocumentKind {
+  required_upload
+}
+
+enum DocumentStatus {
+  needed
+  uploaded
+}
+
+model User {
+  id          String          @id @default(cuid())
+  name        String
+  email       String          @unique
+  role        UserRole
+  memberships ProjectMember[]
+}
+
+model Project {
+  id        String          @id @default(cuid())
+  name      String
+  address   String
+  ahjName   String
+  createdAt DateTime        @default(now())
+  members   ProjectMember[]
+  permits   Permit[]
+}
+
+model ProjectMember {
+  id        String  @id @default(cuid())
+  projectId String
+  userId    String
+  project   Project @relation(fields: [projectId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+}
+
+model Permit {
+  id           String     @id @default(cuid())
+  projectId    String
+  name         String
+  permitNumber String?
+  project      Project    @relation(fields: [projectId], references: [id])
+  approvals    Approval[]
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  permitId    String
+  name        String
+  status      ApprovalStatus @default(preparing)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  permit      Permit         @relation(fields: [permitId], references: [id])
+  documents   Document[]
+}
+
+model Document {
+  id         String         @id @default(cuid())
+  approvalId String
+  name       String
+  kind       DocumentKind   @default(required_upload)
+  status     DocumentStatus @default(needed)
+  filePath   String?
+  uploadedAt DateTime?
+  approval   Approval       @relation(fields: [approvalId], references: [id])
+}
