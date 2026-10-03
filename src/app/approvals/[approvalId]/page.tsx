@@ -23,7 +23,11 @@ export default async function ApprovalPage({
   const approval = await db.approval.findUnique({
     where: { id: approvalId },
     include: {
-      documents: { orderBy: { name: "asc" } },
+      documents: {
+        where: { type: "submittal" },
+        include: { submittal: true },
+        orderBy: { name: "asc" },
+      },
       permit: { include: { project: true } },
     },
   });
@@ -69,7 +73,10 @@ type ApprovalWithDocs = NonNullable<
     ReturnType<
       typeof db.approval.findUnique<{
         where: { id: string };
-        include: { documents: true; permit: { include: { project: true } } };
+        include: {
+          documents: { include: { submittal: true } };
+          permit: { include: { project: true } };
+        };
       }>
     >
   >
@@ -89,7 +96,7 @@ function PackageList({
         <li key={doc.id} className="flex items-center justify-between px-4 py-3">
           <div>
             <div className="text-sm">{doc.name}</div>
-            {doc.status === "uploaded" && doc.filePath ? (
+            {doc.submittal?.status === "uploaded" && doc.filePath ? (
               <a
                 href={`/api/files/${doc.filePath}`}
                 target="_blank"
@@ -102,7 +109,7 @@ function PackageList({
               <div className="text-xs text-gray-400">Not uploaded</div>
             )}
           </div>
-          {doc.status === "uploaded" ? (
+          {doc.submittal?.status === "uploaded" ? (
             <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
               Ready
             </span>
@@ -121,7 +128,7 @@ function PackageList({
 
 function Preparing({ approval }: { approval: ApprovalWithDocs }) {
   const total = approval.documents.length;
-  const ready = approval.documents.filter((d) => d.status === "uploaded").length;
+  const ready = approval.documents.filter((d) => d.submittal?.status === "uploaded").length;
   const outstanding = total - ready;
 
   return (

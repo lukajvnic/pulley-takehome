@@ -8,7 +8,7 @@ export async function POST(
 ) {
   const { documentId } = await params;
   const document = await db.document.findUnique({ where: { id: documentId } });
-  if (!document) {
+  if (!document || document.type !== "submittal") {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
@@ -21,7 +21,12 @@ export async function POST(
   const filePath = await saveUpload(file, `doc-${document.id}`);
   const updated = await db.document.update({
     where: { id: document.id },
-    data: { status: "uploaded", filePath, uploadedAt: new Date() },
+    data: {
+      filePath,
+      uploadedAt: new Date(),
+      submittal: { update: { status: "uploaded" } },
+    },
+    include: { submittal: true },
   });
 
   return NextResponse.json(updated);
