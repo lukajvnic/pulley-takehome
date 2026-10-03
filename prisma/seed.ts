@@ -46,14 +46,19 @@ function uploaded(name: string, uploadedAt: Date) {
   writePlaceholderPdf(filename, name);
   return {
     name,
-    status: "uploaded" as const,
+    type: "submittal" as const,
     filePath: filename,
     uploadedAt,
+    submittal: { create: { status: "uploaded" as const } },
   };
 }
 
 /** A document still outstanding. */
-const needed = (name: string) => ({ name, status: "needed" as const });
+const needed = (name: string) => ({
+  name,
+  type: "submittal" as const,
+  submittal: { create: { status: "needed" as const } },
+});
 
 async function main() {
   // Reset everything so the seed is idempotent.
@@ -108,14 +113,13 @@ async function main() {
     },
   });
 
-  // Comments received from the jurisdiction. Nothing about those comments
-  // lives in Pulley yet; getting them in is the assignment.
+  // Starts in preparing so the full flow (submit, comments received, upload
+  // the Oakview letter) can be run from the beginning.
   await db.approval.create({
     data: {
       permitId: harborBuildingPermit.id,
       name: "Building Plan Review",
-      status: "comments",
-      submittedAt: new Date("2026-06-22T12:00:00Z"),
+      status: "preparing",
     },
   });
 
@@ -179,10 +183,9 @@ async function main() {
       approvals: {
         create: [
           {
-            // A second approval sitting in `comments`, for a different jurisdiction.
+            // Starts in preparing; the Mesa letter is uploaded after submitting.
             name: "Environmental Health Plan Review",
-            status: "comments",
-            submittedAt: new Date("2026-07-01T12:00:00Z"),
+            status: "preparing",
           },
         ],
       },

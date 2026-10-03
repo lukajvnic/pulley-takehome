@@ -35,6 +35,12 @@
 ## challenges
 
  - deciding if i should reuse/modify document for comments, create two separate schemas, or make a superschema with subschemas document and comments
+ - deciding which fields to put in schemas, e.g. which fields to put in Comment
+ - re-parsing would delete any comment responses (block reparsing)
+    - requires adding manual edits if no reparse
+    - would reparsing even work if temp is low or zero?
+
+## todo
 
 ## Implementation Plan
 
@@ -42,14 +48,14 @@
 (class table inheritance)
  - create three new schemas:  
     - SubmittalDocument (fields unique to original document that are unnecessary for commentletter)
-        - id
+        - documentId  // primary key, same as Document.id
         - kind
         - status
         - document
     - CommentLetter
-        - id
-        - round
-        - receivedAt  // filled in by parse
+        - documentId  // primary key, same as Document.id
+        - round  // computed locally
+        - letterDate  // filled in by parse
         - reviewerName  // filled in by parse
         - parseStatus
         - parseError
@@ -60,11 +66,16 @@
         - id
         - letterId
         - number
+        - position
         - discipline
         - text
         - sheetRefs
         - codeRefs
         - commentType (correction, informational, administrative)
+        - response
+        - attachments[SubmittalDocument]
+        - assigneeId  // optional, references User.id
+        - assignee
         - letter
  - Update document to just have
     - id

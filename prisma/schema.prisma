@@ -30,12 +30,30 @@ enum DocumentStatus {
   uploaded
 }
 
+enum DocumentType {
+  submittal
+  comment_letter
+}
+
+enum ParseStatus {
+  processing
+  done
+  failed
+}
+
+enum CommentType {
+  correction
+  informational
+  administrative
+}
+
 model User {
-  id          String          @id @default(cuid())
-  name        String
-  email       String          @unique
-  role        UserRole
-  memberships ProjectMember[]
+  id               String          @id @default(cuid())
+  name             String
+  email            String          @unique
+  role             UserRole
+  memberships      ProjectMember[]
+  assignedComments Comment[]
 }
 
 model Project {
@@ -78,13 +96,55 @@ model Approval {
   documents   Document[]
 }
 
+// Base table for every file attached to an approval. `type` says which subtype
+// table (SubmittalDocument or CommentLetter) holds the rest of its fields.
 model Document {
-  id         String         @id @default(cuid())
-  approvalId String
-  name       String
+  id            String             @id @default(cuid())
+  approvalId    String
+  name          String
+  type          DocumentType
+  filePath      String?
+  uploadedAt    DateTime?
+  approval      Approval           @relation(fields: [approvalId], references: [id])
+  submittal     SubmittalDocument?
+  commentLetter CommentLetter?
+}
+
+// A file the team submits to the jurisdiction (the package checklist, and files
+// referenced from comment responses).
+model SubmittalDocument {
+  documentId String         @id
   kind       DocumentKind   @default(required_upload)
   status     DocumentStatus @default(needed)
-  filePath   String?
-  uploadedAt DateTime?
-  approval   Approval       @relation(fields: [approvalId], references: [id])
+  document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  comments   Comment[]
+}
+
+// A comment letter received from the jurisdiction, one per review round.
+model CommentLetter {
+  documentId   String      @id
+  round        Int
+  letterDate   DateTime?
+  reviewerName String?
+  parseStatus  ParseStatus @default(processing)
+  parseError   String?
+  document     Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  comments     Comment[]
+}
+
+model Comment {
+  id          String              @id @default(cuid())
+  letterId    String
+  number      String // as printed on the letter: "4", "A-1", "TE 1"
+  position    Int // order within the letter
+  discipline  String?
+  text        String
+  sheetRefs   String[]
+  codeRefs    String[]
+  commentType CommentType         @default(correction)
+  response    String?
+  assigneeId  String?
+  letter      CommentLetter       @relation(fields: [letterId], references: [documentId], onDelete: Cascade)
+  assignee    User?               @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  attachments SubmittalDocument[]
 }
