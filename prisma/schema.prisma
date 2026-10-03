@@ -138,11 +138,13 @@ model Comment {
   number      String // as printed on the letter: "4", "A-1", "TE 1"
   position    Int // order within the letter
   discipline  String?
+  title       String? // short summary written by the parser
   text        String
   sheetRefs   String[]
   codeRefs    String[]
   commentType CommentType         @default(correction)
   response    String?
+  completed   Boolean             @default(false)
   assigneeId  String?
   letter      CommentLetter       @relation(fields: [letterId], references: [documentId], onDelete: Cascade)
   assignee    User?               @relation(fields: [assigneeId], references: [id], onDelete: SetNull)

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comments — Ledger</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1F4FD1}a:hover{color:#163A9E}
+.rowbtn:hover{background:#FAFAF7}
+.opt:hover{background:#F3F3EF}
+button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid #1F4FD1;outline-offset:2px}
+textarea::placeholder{color:#7A7F88}
+</style>
+</helmet>
+<div style="width: 1120px; min-height: 1060px; box-sizing: border-box; padding: 40px 48px; background: #F6F6F3; font-family: 'IBM Plex Sans', sans-serif; color: #17191C">
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.06em; color: #5B606A">BLD-2026-04817 · REVIEW CYCLE 2</div>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.01em">Plan review comments</h1>
+    </div>
+    <div style="font-size: 13px; color: #5B606A">{{total}} comments · {{openCount}} awaiting response</div>
+  </header>
+
+  <div style="background: #FFFFFF; border: 1px solid #E2E2DD; border-radius: 8px">
+    <div style="display: grid; grid-template-columns: 20px 44px minmax(0, 1fr) 180px 104px; column-gap: 12px; padding: 10px 20px; border-bottom: 1px solid #E7E7E2; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: #5B606A">
+      <span></span><span>NO.</span><span>COMMENT</span><span>ASSIGNED</span><span>STATUS</span>
+    </div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+      <div style="{{r.wrapStyle}}">
+        <button type="button" class="rowbtn" onClick="{{r.toggle}}" aria-expanded="{{r.ariaExp}}" style="width: 100%; display: grid; grid-template-columns: 20px 44px minmax(0, 1fr) 180px 104px; align-items: center; column-gap: 12px; padding: 12px 20px; min-height: 60px; background: transparent; border: 0; text-align: left; font: inherit; color: inherit; cursor: pointer">
+          <span style="{{r.chevStyle}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B606A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #5B606A">{{r.num}}</span>
+          <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+            <span style="font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.title}}</span>
+            <span style="display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #4A4F57"><span style="{{r.dotStyle}}"></span>{{r.disc}}<span style="font-family: 'IBM Plex Mono', monospace; font-weight: 400; letter-spacing: 0; color: #5B606A">· {{r.primarySheet}}</span></span>
+          </span>
+          <span style="display: flex; align-items: center; gap: 8px; min-width: 0" title="{{r.assigneeNames}}">
+            <span style="display: flex; align-items: center">
+              <sc-for list="{{r.avatars}}" as="a" hint-placeholder-count="2">
+                <span style="{{a.style}}">{{a.ini}}</span>
+              </sc-for>
+            </span>
+            <span style="font-size: 12.5px; color: #4A4F57; white-space: nowrap">{{r.assignee}}</span>
+          </span>
+          <span><span style="{{r.statusStyle}}">{{r.status}}</span></span>
+        </button>
+
+        <sc-if value="{{r.isOpen}}" hint-placeholder-val="{{true}}">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 32px; padding: 4px 20px 24px 96px">
+            <div style="display: flex; flex-direction: column; gap: 22px; min-width: 0">
+              <section style="display: flex; flex-direction: column; gap: 8px">
+                <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: #5B606A">AHJ COMMENT</div>
+                <p style="margin: 0; font-size: 14.5px; line-height: 1.65; color: #24272D">
+                  <sc-for list="{{r.segs}}" as="s" hint-placeholder-count="5"><sc-if value="{{s.isRef}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: #17191C">{{s.t}}</span></sc-if><sc-if value="{{s.isText}}" hint-placeholder-val="{{true}}">{{s.t}}</sc-if></sc-for>
+                </p>
+              </section>
+
+              <section style="display: flex; flex-direction: column; gap: 8px">
+                <label for="{{r.respId}}" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: #5B606A">YOUR RESPONSE</label>
+                <textarea id="{{r.respId}}" placeholder="Describe how the drawings were revised, citing sheet and detail numbers…" style="min-height: 112px; resize: vertical; box-sizing: border-box; width: 100%; padding: 12px 14px; border: 1px solid #D6D6D0; border-radius: 6px; font: inherit; font-size: 14px; line-height: 1.55; color: #17191C; background: #FFFFFF"></textarea>
+                <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+                  <div style="position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 360px; min-width: 0">
+                    <button type="button" onClick="{{r.toggleMenu}}" aria-expanded="{{r.menuAria}}" aria-haspopup="true" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #D6D6D0; border-radius: 6px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 500; color: #17191C; cursor: pointer">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                      Attach files
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5B606A">{{r.attCount}}</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B606A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+                    </button>
+                    <sc-for list="{{r.attached}}" as="f" hint-placeholder-count="2">
+                      <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; border-radius: 5px; background: #EEF1FB; color: #1E3A8A; font-size: 12.5px; max-width: 240px">
+                        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+                        <button type="button" onClick="{{f.toggle}}" aria-label="Remove {{f.name}}" style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 0; border-radius: 4px; background: transparent; color: #1E3A8A; cursor: pointer; padding: 0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+                      </span>
+                    </sc-for>
+                    <sc-if value="{{r.menuOpen}}" hint-placeholder-val="{{false}}">
+                      <div style="position: absolute; top: 44px; left: 0; z-index: 20; width: 380px; background: #FFFFFF; border: 1px solid #D6D6D0; border-radius: 8px; box-shadow: 0 14px 36px rgba(23, 25, 28, 0.16); padding: 6px">
+                        <div style="padding: 8px 10px 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: #5B606A">PROJECT FILES</div>
+                        <sc-for list="{{r.files}}" as="f" hint-placeholder-count="7">
+                          <label for="{{f.inputId}}" class="opt" style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; min-height: 38px">
+                            <input id="{{f.inputId}}" type="checkbox" checked="{{f.checked}}" onChange="{{f.toggle}}" style="width: 16px; height: 16px; margin: 0; accent-color: #1F4FD1">
+                            <span style="display: flex; flex-direction: column; min-width: 0">
+                              <span style="font-size: 13px; color: #17191C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+                              <span style="font-size: 11.5px; color: #5B606A">{{f.meta}}</span>
+                            </span>
+                          </label>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <span style="display: inline-flex; align-items: center; gap: 6px; height: 36px; font-size: 12px; color: #5B606A">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2F7A45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                    Draft saved
+                  </span>
+                </div>
+              </section>
+            </div>
+
+            <aside style="align-self: start; display: flex; flex-direction: column; gap: 16px; padding: 16px; background: #F6F6F3; border: 1px solid #ECECE7; border-radius: 6px">
+              <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; color: #5B606A">REFERENCED IN COMMENT</div>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div style="font-size: 12px; font-weight: 600; color: #4A4F57; margin-bottom: 2px">Drawings</div>
+                <sc-for list="{{r.sheets}}" as="x" hint-placeholder-count="2">
+                  <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px; margin: 0 -8px; border-radius: 5px; text-decoration: none; color: #17191C">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4F57" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1.5"></rect><path d="M3 15h18M14 15v5"></path></svg>
+                    <span style="display: flex; flex-direction: column; min-width: 0">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 600">{{x.code}}</span>
+                      <span style="font-size: 12px; color: #4A4F57">{{x.label}}</span>
+                    </span>
+                  </a>
+                </sc-for>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div style="font-size: 12px; font-weight: 600; color: #4A4F57; margin-bottom: 2px">Codes &amp; standards</div>
+                <sc-for list="{{r.codes}}" as="x" hint-placeholder-count="2">
+                  <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px; margin: 0 -8px; border-radius: 5px; text-decoration: none; color: #17191C">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4A4F57" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"></path><path d="M5 17a3 3 0 0 1 3-3h11"></path></svg>
+                    <span style="display: flex; flex-direction: column; min-width: 0">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 600">{{x.code}}</span>
+                      <span style="font-size: 12px; color: #4A4F57">{{x.label}}</span>
+                    </span>
+                  </a>
+                </sc-for>
+              </div>
+            </aside>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":1060}}'>
+const PEOPLE = {
+  MR: { n: 'Maya Reyes', bg: '#F3D6C1', fg: '#6B2F0A' },
+  DK: { n: 'Dev Kapoor', bg: '#D3E2F6', fg: '#173A73' },
+  JL: { n: 'Jordan Lee', bg: '#D6ECD2', fg: '#22501C' },
+  SO: { n: 'Sam Okafor', bg: '#E6D8F3', fg: '#4B1F6E' },
+  AT: { n: 'Ana Torres', bg: '#F4E4B0', fg: '#5C4307' }
+};
+const DISC = {
+  'STRUCTURAL': { c: '#C2410C', ab: 'S' },
+  'FIRE / LIFE SAFETY': { c: '#B91C1C', ab: 'FP' },
+  'ELECTRICAL': { c: '#A16207', ab: 'E' },
+  'MECHANICAL': { c: '#0F766E', ab: 'M' },
+  'PLUMBING': { c: '#1D4ED8', ab: 'P' },
+  'ACCESSIBILITY': { c: '#7C3AED', ab: 'AC' },
+  'ZONING': { c: '#4D7C0F', ab: 'Z' }
+};
+const STATUS = {
+  'Open': { bg: '#FBEBDD', fg: '#8A3A0B' },
+  'Draft': { bg: '#E8ECFB', fg: '#2E3A8C' },
+  'Responded': { bg: '#E3F2E6', fg: '#1E5B2E' }
+};
+const LABELS = {
+  'S-201': 'Shear Wall Schedule, Level 2', 'S-501': 'Typical Wood Details',
+  'CBC §2305.3': 'Shear wall construction', 'ASCE 7-22 §12.3': 'Diaphragm flexibility & irregularities',
+  'A-201': 'Floor Plan, Level 2', 'A-601': 'Wall Types & Assemblies',
+  'CBC Table 1020.2': 'Corridor fire-resistance rating', 'UL U419': 'Non-bearing wall assembly, 1-hr',
+  'E-001': 'Electrical Load Calculation', 'E-601': 'Panel Schedules',
+  'NEC 220.87': 'Determining existing loads', 'NEC 625.42': 'EVSE rating & load management',
+  'A-101': 'Site Plan', 'CBC 11B-402': 'Accessible routes', 'CBC 11B-206.2.1': 'Site arrival points',
+  'M-201': 'Mechanical Plan, Level 1', 'M-301': 'Mechanical Roof Plan', 'CMC §506.9': 'Exhaust outlet clearances',
+  'P-101': 'Plumbing Site Plan', 'P-401': 'Domestic Water Riser', 'CPC §603.5': 'Backflow prevention',
+  'A-100': 'Architectural Site Plan', 'Muni. Code §17.24.040': 'R-3 zone setbacks', 'Muni. Code §17.48.020': 'Permitted projections into yards'
+};
+const FILES = [
+  { id: 'f1', name: 'S-201_Shear-Wall-Schedule_rev2.pdf', meta: 'PDF · 2.4 MB' },
+  { id: 'f2', name: 'Lateral-Calc-Package_v3.pdf', meta: 'PDF · 8.1 MB' },
+  { id: 'f3', name: 'Hold-Down-Hardware-Cut-Sheets.pdf', meta: 'PDF · 1.2 MB' },
+  { id: 'f4', name: 'A-201_Level-2-Floor-Plan_rev2.pdf', meta: 'PDF · 3.6 MB' },
+  { id: 'f5', name: 'Rated-Assembly-Listing_U419.pdf', meta: 'PDF · 420 KB' },
+  { id: 'f6', name: 'E-601_Panel-Schedules.pdf', meta: 'PDF · 980 KB' },
+  { id: 'f7', name: 'Response-Letter_Cycle2_DRAFT.docx', meta: 'DOCX · 64 KB' }
+];
+const COMMENTS = [
+  { id: '14', title: 'Specify hold-down hardware for Level 2 shear walls', disc: 'STRUCTURAL', who: ['MR', 'DK'], status: 'Open', due: 'Oct 9', date: 'Sep 28',
+    text: 'Shear wall schedule on {S-201} does not identify hold-down hardware for walls SW-3 and SW-4. Provide hold-down type, anchor embedment and edge nailing, and confirm values match the lateral calculations. Detailing shall comply with {CBC §2305.3} and {ASCE 7-22 §12.3}. See also typical detail 7 on {S-501}.' },
+  { id: '22', title: 'Upgrade corridor walls to 1-hour fire rating', disc: 'FIRE / LIFE SAFETY', who: ['JL'], status: 'Draft', due: 'Oct 9', date: 'Sep 28',
+    text: 'A corridor serving an occupant load greater than 30 requires 1-hour fire-resistance-rated walls per {CBC Table 1020.2}. Wall type W3 shown on {A-201} is non-rated. Revise the wall type and provide a listed assembly such as {UL U419}, with the full listing on {A-601}.' },
+  { id: '23', title: 'Revise service load calculation for Panel MDP', disc: 'ELECTRICAL', who: ['SO', 'AT', 'DK'], status: 'Open', due: 'Oct 11', date: 'Sep 28',
+    text: 'Load calculation on {E-001} omits the EV charging circuits shown on {E-601}. Revise the calculation per {NEC 220.87} and confirm the 400 A service remains adequate, or provide a load management system per {NEC 625.42}.' },
+  { id: '31', title: 'Show accessible route to trash enclosure', disc: 'ACCESSIBILITY', who: ['MR'], status: 'Responded', due: 'Oct 4', date: 'Sep 27',
+    text: 'Site plan {A-101} does not show an accessible route from the building entrance to the trash enclosure. Provide a route complying with {CBC 11B-402}, including slopes, widths and surface, as required by {CBC 11B-206.2.1}.' },
+  { id: '35', title: 'Relocate Type I hood exhaust termination', disc: 'MECHANICAL', who: ['DK', 'JL'], status: 'Open', due: 'Oct 11', date: 'Sep 27',
+    text: 'Type I hood exhaust termination on {M-201} is 6 ft from the operable window on the east elevation. A minimum 10 ft horizontal clearance is required per {CMC §506.9}. Relocate the termination and update the roof plan on {M-301}.' },
+  { id: '40', title: 'Add backflow preventer at domestic water entry', disc: 'PLUMBING', who: ['AT'], status: 'Open', due: 'Oct 14', date: 'Sep 26',
+    text: 'Provide a reduced-pressure backflow assembly at the domestic water service entry shown on {P-101}, per {CPC §603.5} and local water purveyor standards. Show the assembly in the riser diagram on {P-401}.' },
+  { id: '41', title: 'Dimension north side yard setback', disc: 'ZONING', who: ['SO', 'MR'], status: 'Draft', due: 'Oct 14', date: 'Sep 26',
+    text: 'Dimension the north side yard setback on {A-100}. A minimum of 10 ft is required in the R-3 zone per {Muni. Code §17.24.040}. Bay window projections must comply with {Muni. Code §17.48.020}.' }
+];
+function refList(text) {
+  const seen = [];
+  const re = /\{([^}]+)\}/g;
+  let m;
+  while ((m = re.exec(text))) { if (seen.indexOf(m[1]) < 0) seen.push(m[1]); }
+  return seen.map((k, i) => ({ code: k, label: LABELS[k] || '', isSheet: /^[A-Z]-\d/.test(k), n: i + 1 }));
+}
+function splitSegs(text, refs) {
+  const out = [];
+  const re = /\{([^}]+)\}/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push({ t: text.slice(last, m.index), isRef: false, isText: true });
+    const r = refs.find((x) => x.code === m[1]);
+    out.push({ t: m[1], isRef: true, isText: false, n: r ? r.n : '', isSheet: r ? r.isSheet : false });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push({ t: text.slice(last), isRef: false, isText: true });
+  return out;
+}
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: { '14': true }, menu: null, att: { '14': ['f1', 'f3'], '22': ['f4', 'f5'] } };
+  }
+  toggleRow(id) { const o = Object.assign({}, this.state.open); o[id] = !o[id]; this.setState({ open: o, menu: null }); }
+  toggleMenu(id) { this.setState({ menu: this.state.menu === id ? null : id }); }
+  toggleFile(id, fid) {
+    const a = Object.assign({}, this.state.att);
+    const cur = (a[id] || []).slice();
+    const i = cur.indexOf(fid);
+    if (i < 0) cur.push(fid); else cur.splice(i, 1);
+    a[id] = cur;
+    this.setState({ att: a });
+  }
+  renderVals() {
+    const s = this.state;
+    const rows = COMMENTS.map((c, i) => {
+      const isOpen = !!s.open[c.id];
+      const ids = s.att[c.id] || [];
+      const files = FILES.map((f) => ({ id: f.id, name: f.name, meta: f.meta, checked: ids.indexOf(f.id) >= 0, inputId: 'f-' + c.id + '-' + f.id, toggle: () => this.toggleFile(c.id, f.id) }));
+      const attached = files.filter((f) => f.checked);
+      const refs = refList(c.text);
+      const d = DISC[c.disc];
+      const st = STATUS[c.status];
+      const p0 = PEOPLE[c.who[0]].n.split(' ');
+      const n = c.who.length;
+      return {
+        id: c.id, num: c.id.padStart(3, '0'), title: c.title, disc: c.disc,
+        dotStyle: 'display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:' + d.c,
+        avatars: c.who.map((k, j) => ({ ini: k, name: PEOPLE[k].n,
+          style: 'width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;letter-spacing:0.02em;background:' + PEOPLE[k].bg + ';color:' + PEOPLE[k].fg + ';box-shadow:0 0 0 2px #FFFFFF;position:relative;margin-left:' + (j ? -8 : 0) + 'px;z-index:' + (10 - j) })),
+        assignee: p0[0] + ' ' + p0[1][0] + '.' + (n > 1 ? '  +' + (n - 1) : ''),
+        assigneeNames: c.who.map((k) => PEOPLE[k].n).join(', '),
+        status: c.status,
+        statusStyle: 'display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:500;background:' + st.bg + ';color:' + st.fg,
+        due: c.due, date: c.date, reviewer: 'R. Alvarez, Plans Examiner',
+        isOpen, ariaExp: isOpen ? 'true' : 'false', toggle: () => this.toggleRow(c.id),
+        chevStyle: 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (isOpen ? 90 : 0) + 'deg)',
+        wrapStyle: 'position:relative;border-top:' + (i ? '1px solid #EDEDE8' : '0') + ';background:' + (isOpen ? '#FCFCFA' : '#FFFFFF') + (i === COMMENTS.length - 1 ? ';border-radius:0 0 8px 8px' : ''),
+        segs: splitSegs(c.text, refs), refs,
+        sheets: refs.filter((r) => r.isSheet), codes: refs.filter((r) => !r.isSheet),
+        primarySheet: (refs.find((r) => r.isSheet) || {}).code || '',
+        files, attached, attCount: attached.length ? '(' + attached.length + ')' : '',
+        menuOpen: s.menu === c.id, menuAria: s.menu === c.id ? 'true' : 'false', toggleMenu: () => this.toggleMenu(c.id),
+        respId: 'resp-' + c.id
+      };
+    });
+    return { rows, total: COMMENTS.length, openCount: COMMENTS.filter((c) => c.status !== 'Responded').length };
+  }
+}
+</script>
+</body>
+</html>

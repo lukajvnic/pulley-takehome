@@ -34,10 +34,12 @@ export type CommentFields = {
   number?: string;
   text?: string;
   discipline?: string | null;
+  title?: string | null;
   commentType?: CommentType;
   sheetRefs?: string[];
   codeRefs?: string[];
   response?: string | null;
+  completed?: boolean;
   assigneeId?: string | null;
 };
 
@@ -72,13 +74,17 @@ export function readCommentFields(
     }
     fields.commentType = body.commentType as CommentType;
   }
+  if (body.completed !== undefined) {
+    if (typeof body.completed !== "boolean") return { error: "completed must be a boolean" };
+    fields.completed = body.completed;
+  }
   for (const key of ["sheetRefs", "codeRefs"] as const) {
     const value = body[key];
     if (value === undefined) continue;
     if (!isStringArray(value)) return { error: `${key} must be an array of strings` };
     fields[key] = value;
   }
-  for (const key of ["discipline", "response", "assigneeId"] as const) {
+  for (const key of ["discipline", "title", "response", "assigneeId"] as const) {
     const value = body[key];
     if (value === undefined) continue;
     if (value !== null && typeof value !== "string") {

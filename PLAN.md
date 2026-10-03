@@ -52,6 +52,7 @@
 - [ ] generate response pdf
 - [ ] split "what we submitted" by review round
 - [ ] pdf viewer jump to comment
+- [ ] add filters on comments list
 
 ## Implementation Plan
 

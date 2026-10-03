@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import { StatusPill } from "@/components/StatusPill";
 import { StageActions } from "@/components/StageActions";
 import { UploadButton } from "@/components/UploadButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { CommentLedger } from "@/components/CommentLedger";
+import type { LedgerComment } from "@/components/CommentRow";
+import { fileMeta } from "@/lib/format";
+import { uploadSize } from "@/lib/uploads";
 
 export const dynamic = "force-dynamic";
 
@@ -171,33 +176,113 @@ function Submitted({ approval }: { approval: ApprovalWithDocs }) {
         <h2 className="mb-3 text-lg font-medium">What we submitted</h2>
         <PackageList approval={approval} editable={false} />
       </div>
+
+      {/* After a resubmittal, the answered comments stay visible, read-only. */}
+      <div className="mt-10">
+        <LetterComments approval={approval} editable={false} />
+      </div>
     </section>
   );
 }
 
 function Comments({ approval }: { approval: ApprovalWithDocs }) {
-  const ahj = approval.permit.project.ahjName;
-  return (
-    <section>
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-        <p className="font-medium text-amber-900">
-          Comments have been received from {ahj}.
-        </p>
-      </div>
+  return <LetterComments approval={approval} editable />;
+}
 
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-medium">Comments</h2>
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-          <p className="text-sm text-gray-700">
-            No comments have been added to Pulley yet.
-          </p>
-          <p className="mt-1 text-sm text-gray-500">
-            The comments from {ahj} need to get in here before the team can respond
-            to them.
-          </p>
-        </div>
-      </div>
-    </section>
+/** The approval's latest comment letter and the team's responses to it. */
+async function LetterComments({
+  approval,
+  editable,
+}: {
+  approval: ApprovalWithDocs;
+  editable: boolean;
+}) {
+  const letter = await db.commentLetter.findFirst({
+    where: { document: { approvalId: approval.id } },
+    orderBy: { round: "desc" },
+    include: {
+      document: true,
+      comments: {
+        orderBy: { position: "asc" },
+        include: { assignee: true, attachments: { select: { documentId: true } } },
+      },
+    },
+  });
+  if (!letter) return null;
+
+  const caption = [approval.permit.permitNumber, `Review cycle ${letter.round}`]
+    .filter(Boolean)
+    .join(" · ");
+  const letterUrl = `/api/files/${letter.document.filePath}`;
+  const letterLink = (
+    <a
+      href={letterUrl}
+      target="_blank"
+      className="text-accent hover:text-accent-hover"
+    >
+      {letter.document.name}
+    </a>
+  );
+
+  const notice =
+    letter.parseStatus === "processing" ? (
+      <>Reading the comments in {letterLink}. This takes a few seconds.</>
+    ) : letter.parseStatus === "failed" ? (
+      <>Couldn&apos;t read the comments in {letterLink}.</>
+    ) : letter.comments.length === 0 ? (
+      <>No comments were found in {letterLink}.</>
+    ) : undefined;
+
+  const comments: LedgerComment[] = letter.comments.map((c) => ({
+    id: c.id,
+    number: c.number,
+    title: c.title ?? c.text,
+    discipline: c.discipline,
+    text: c.text,
+    sheetRefs: c.sheetRefs,
+    codeRefs: c.codeRefs,
+    commentType: c.commentType,
+    response: c.response ?? "",
+    completed: c.completed,
+    assignee: c.assignee && { id: c.assignee.id, name: c.assignee.name },
+    attachmentIds: c.attachments.map((a) => a.documentId),
+  }));
+
+  // The project team, who comments can be assigned to.
+  const memberships = await db.projectMember.findMany({
+    where: { projectId: approval.permit.projectId },
+    include: { user: true },
+    orderBy: { user: { name: "asc" } },
+  });
+  const members = memberships.map(({ user }) => ({ id: user.id, name: user.name, role: user.role }));
+
+  // Uploaded package files, which responses can reference.
+  const files = await Promise.all(
+    approval.documents
+      .filter((d) => d.submittal?.status === "uploaded" && d.filePath)
+      .map(async (d) => ({
+        id: d.id,
+        name: d.name,
+        meta: fileMeta(d.filePath!, await uploadSize(d.filePath!)),
+      }))
+  );
+
+  return (
+    <>
+      {letter.parseStatus === "processing" && <AutoRefresh />}
+      <CommentLedger
+        // Remount when parsing finishes so the rows start from the new data.
+        key={`${letter.documentId}-${letter.parseStatus}`}
+        approvalId={approval.id}
+        caption={caption}
+        editable={editable}
+        comments={comments}
+        files={files}
+        letterUrl={letterUrl}
+        members={members}
+        notice={notice}
+      />
+    </>
   );
 }
 
