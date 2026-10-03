@@ -26,7 +26,8 @@ export async function PATCH(
     where: { id: approval.id },
     data: {
       status,
-      ...(status === "submitted" && !approval.submittedAt
+      // Reset on every move into submitted, so a resubmittal gets its own date.
+      ...(status === "submitted" && approval.status !== "submitted"
         ? { submittedAt: new Date() }
         : {}),
       ...(status === "approved" && !approval.approvedAt

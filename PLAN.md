@@ -39,8 +39,19 @@
  - re-parsing would delete any comment responses (block reparsing)
     - requires adding manual edits if no reparse
     - would reparsing even work if temp is low or zero?
+    - decided on no re-parse, meaning no endpoint for parse. parse only starts from upload
+
+## design choices
+
+ - modifying document
+ - using gpt-6 luna
 
 ## todo
+
+- [ ] make architecture diagram
+- [ ] generate response pdf
+- [ ] split "what we submitted" by review round
+- [ ] pdf viewer jump to comment
 
 ## Implementation Plan
 
@@ -86,7 +97,12 @@
     - uploadedAt
     - approval
 
-### pdf upload
+### UI Plan
  - clicking comments recieved should prompt for pdf upload
- - save uploaded pdfs to uploads folder
- - 
+    - will be single PDF for MVP
+ - in backend: take pdf and kick off parsing
+ - user is now on comments stage
+ - show list of comments
+    - horizontal rows, listed by position order, with info in the following order:
+    - (AI GENERATED SUMMARY TITLE??)
+    - (number, discipline, sheet-refs [dropdown], code-refs [dropdown], assignee, text, response)
