@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { StatusPill } from "@/components/StatusPill";
+import { BackLink } from "@/components/links";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,7 @@ export default async function ProjectPage({
 
   return (
     <div>
-      <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
-        ← Projects
-      </Link>
+      <BackLink href="/">Projects</BackLink>
       <h1 className="mt-2 text-2xl font-semibold">{project.name}</h1>
       <p className="mt-1 text-sm text-gray-500">
         {project.address} · {project.ahjName}

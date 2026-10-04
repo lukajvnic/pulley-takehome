@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { plural } from "@/lib/format";
+import { Pill } from "@/components/StatusPill";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +35,14 @@ export default async function ProjectsPage() {
                     </div>
                   </div>
                   {openComments > 0 && (
-                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                    <Pill className="bg-amber-100 text-amber-800">
                       {openComments} with comments
-                    </span>
+                    </Pill>
                   )}
                 </div>
                 <div className="mt-2 text-sm text-gray-500">
-                  {project.permits.length} permit{project.permits.length === 1 ? "" : "s"} ·{" "}
-                  {project.members.length} team member{project.members.length === 1 ? "" : "s"}
+                  {plural(project.permits.length, "permit")} ·{" "}
+                  {plural(project.members.length, "team member")}
                 </div>
               </Link>
             </li>

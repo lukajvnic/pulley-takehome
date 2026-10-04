@@ -2,12 +2,8 @@
 
 import { useId, useState, type FormEvent } from "react";
 import type { CommentType } from "@prisma/client";
-import {
-  INPUT,
-  LABEL,
-  PRIMARY_BUTTON,
-  SECONDARY_BUTTON,
-} from "@/components/ledger-styles";
+import { FOCUS_RING, INPUT, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
+import { ChevronDownIcon } from "@/components/icons";
 
 /** A comment's own fields, as printed on the letter. */
 export type CommentFields = {
@@ -26,11 +22,17 @@ const TYPES: { value: CommentType; label: string }[] = [
   { value: "administrative", label: "Administrative" },
 ];
 
-const splitList = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+/** "A-101, S-201" → ["A-101", "S-201"], without blanks or repeats. */
+const splitList = (value: string) => [
+  ...new Set(
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ),
+];
+
+const TEXT_BUTTON = `cursor-pointer rounded-xs hover:underline disabled:opacity-50 ${FOCUS_RING}`;
 
 /**
  * Edits a comment the parser got wrong, or adds one it missed. `onSave` and
@@ -122,9 +124,7 @@ export function CommentEditor({
                 </option>
               ))}
             </select>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted" />
           </span>
         </label>
       </div>
@@ -157,14 +157,14 @@ export function CommentEditor({
                   type="button"
                   disabled={busy}
                   onClick={remove}
-                  className="cursor-pointer font-medium text-status-open-ink hover:underline disabled:opacity-50"
+                  className={`${TEXT_BUTTON} font-medium text-status-open-ink`}
                 >
                   Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmingDelete(false)}
-                  className="cursor-pointer text-ink-secondary hover:underline"
+                  className={`${TEXT_BUTTON} text-ink-secondary`}
                 >
                   Keep
                 </button>
@@ -173,12 +173,16 @@ export function CommentEditor({
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(true)}
-                className="cursor-pointer text-status-open-ink hover:underline"
+                className={`${TEXT_BUTTON} text-status-open-ink`}
               >
                 Delete comment
               </button>
             ))}
-          {error && <span className="text-status-open-ink">{error}</span>}
+          {error && (
+            <span role="alert" className="text-status-open-ink">
+              {error}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={onCancel} className={SECONDARY_BUTTON}>

@@ -3,7 +3,7 @@
 // line breaks, hyphenation, quotes and spacing, but not in their words.
 
 /** A page's text items in order, as PDF.js returns them (text items only). */
-export type PageText = string[];
+type PageText = string[];
 
 /** Where the comment starts, and the characters to mark: page → item → [start, end). */
 export type Highlight = {

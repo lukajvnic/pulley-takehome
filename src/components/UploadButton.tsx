@@ -2,15 +2,20 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
+import { errorOf } from "@/lib/requests";
 
 export function UploadButton({
   uploadUrl,
   label,
+  ariaLabel,
   accept,
   primary,
 }: {
   uploadUrl: string;
   label: string;
+  /** Names what's uploaded when the label alone doesn't, e.g. in a list of files. */
+  ariaLabel?: string;
   accept?: string;
   primary?: boolean;
 }) {
@@ -24,17 +29,22 @@ export function UploadButton({
     setError(null);
     const body = new FormData();
     body.append("file", file);
-    const res = await fetch(uploadUrl, { method: "POST", body });
+    const res = await fetch(uploadUrl, { method: "POST", body }).catch(() => null);
     setBusy(false);
-    if (!res.ok) {
-      setError("Upload failed. Please try again.");
+    if (!res?.ok) {
+      setError((await errorOf(res)) ?? "Upload failed. Please try again.");
       return;
     }
     router.refresh();
   }
 
   return (
-    <span>
+    <span className="flex flex-none items-center gap-2">
+      {error && (
+        <span role="alert" className="text-small text-status-open-ink">
+          {error}
+        </span>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -50,15 +60,11 @@ export function UploadButton({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className={
-          primary
-            ? "rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
-            : "rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-        }
+        aria-label={ariaLabel}
+        className={primary ? PRIMARY_BUTTON : SECONDARY_BUTTON}
       >
         {busy ? "Uploading…" : label}
       </button>
-      {error && <span className="ml-2 text-sm text-red-600">{error}</span>}
     </span>
   );
 }

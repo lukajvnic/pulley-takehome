@@ -3,9 +3,13 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { CommentType } from "@prisma/client";
 import { clearPendingSave, trackPendingSave } from "@/lib/pending-saves";
-import { useDismiss } from "@/lib/use-dismiss";
+import { patchComment } from "@/lib/requests";
 import { displayNumber } from "@/lib/format";
-import { FOCUS_RING, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/ledger-styles";
+import { FOCUS_RING, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
+import { CheckIcon } from "@/components/icons";
+import { ExternalLink } from "@/components/links";
+import { AssigneePicker, type Member } from "@/components/AssigneePicker";
+import { AttachFiles, FileChip, type LedgerFile } from "@/components/AttachFiles";
 import { CommentEditor, type CommentFields } from "@/components/CommentEditor";
 
 export type LedgerComment = {
@@ -23,12 +27,8 @@ export type LedgerComment = {
   attachmentIds: string[];
 };
 
-export type LedgerFile = { id: string; name: string; meta: string };
-
-export type Member = { id: string; name: string; role: string };
-
-/** The popovers a row can open; only one is open across the ledger. */
-export type RowMenu = "files" | "assignee";
+/** The fields the ledger changes in place: shown right away, then saved. */
+export type QuickField = "completed" | "assigneeIds" | "attachmentIds";
 
 /** Columns shared by the header row and each comment row. */
 export const ROW_GRID = "grid grid-cols-[20px_44px_minmax(0,1fr)_112px_104px] gap-x-3 px-5";
@@ -54,14 +54,6 @@ const DISCIPLINE_COLORS: [RegExp, string][] = [
   [/zoning|planning/i, "bg-discipline-zoning"],
 ];
 
-const AVATAR_COLORS = [
-  "bg-avatar-1 text-avatar-1-ink",
-  "bg-avatar-2 text-avatar-2-ink",
-  "bg-avatar-3 text-avatar-3-ink",
-  "bg-avatar-4 text-avatar-4-ink",
-  "bg-avatar-5 text-avatar-5-ink",
-];
-
 function statusOf(commentType: CommentType, response: string, completed: boolean): Status {
   if (completed) return "completed";
   if (commentType === "informational") return "info";
@@ -71,27 +63,6 @@ function statusOf(commentType: CommentType, response: string, completed: boolean
 
 function disciplineColor(discipline: string) {
   return DISCIPLINE_COLORS.find(([pattern]) => pattern.test(discipline))?.[1] ?? "bg-ink-muted";
-}
-
-/** Same person, same color, on every row. */
-function avatarColor(userId: string) {
-  let hash = 0;
-  for (const char of userId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-/** "Ben Whitfield" → "Ben W." */
-function shortName(name: string) {
-  const parts = name.split(/\s+/);
-  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
 }
 
 /** Splits text around the cited references; odd entries are the references. */
@@ -107,11 +78,12 @@ function RefCopy({ code, children }: { code: string; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function copy() {
-    await navigator.clipboard.writeText(code).catch(() => {});
-    setCopied(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), 1500);
+  function copy() {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1500);
+    }, () => {});
   }
 
   return (
@@ -126,9 +98,7 @@ function RefCopy({ code, children }: { code: string; children: ReactNode }) {
       <span aria-live="polite" className="ml-auto inline-flex items-center gap-1 text-tiny font-normal text-saved">
         {copied && (
           <>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M5 12.5l4.5 4.5L19 7.5" />
-            </svg>
+            <CheckIcon size={12} />
             Copied
           </>
         )}
@@ -137,182 +107,51 @@ function RefCopy({ code, children }: { code: string; children: ReactNode }) {
   );
 }
 
-// The first avatar sits on top of the ones it overlaps.
-const STACK_ORDER = ["z-30", "z-20", "z-10"];
-
-function Avatar({ member, className = "" }: { member: Member; className?: string }) {
-  return (
-    <span
-      className={`inline-flex size-6.5 flex-none items-center justify-center rounded-full text-micro font-semibold tracking-wide ring-2 ring-white ${avatarColor(
-        member.id
-      )} ${className}`}
-    >
-      {initials(member.name)}
-    </span>
-  );
-}
-
-/** Who's answering the comment. Opens a list of the project's team to pick several from. */
-function AssigneePicker({
-  assignees,
-  members,
-  editable,
-  open,
-  onToggle,
-  onClose,
-  onToggleAssignee,
-}: {
-  assignees: Member[];
-  members: Member[];
-  editable: boolean;
-  open: boolean;
-  onToggle: () => void;
-  onClose: () => void;
-  onToggleAssignee: (userId: string) => void;
-}) {
-  const area = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  useDismiss(open, area, button, onClose);
-
-  const names = assignees.map((member) => member.name).join(", ");
-  const current =
-    assignees.length > 0 ? (
-      <>
-        <span className="flex flex-none">
-          {assignees.slice(0, STACK_ORDER.length).map((member, i) => (
-            <Avatar
-              key={member.id}
-              member={member}
-              className={`relative ${STACK_ORDER[i]} ${i > 0 ? "-ml-2" : ""}`}
-            />
-          ))}
-        </span>
-        <span className="truncate text-meta text-ink-secondary">
-          {shortName(assignees[0].name)}
-          {assignees.length > 1 && ` +${assignees.length - 1}`}
-        </span>
-      </>
-    ) : (
-      <span className="text-meta text-ink-muted">Unassigned</span>
-    );
-
-  if (!editable) {
-    return (
-      <span className="flex min-w-0 items-center justify-center gap-2" title={names || undefined}>
-        {current}
-      </span>
-    );
-  }
-
-  return (
-    // z-10 keeps it clickable above the row's stretched toggle; z-40 when open
-    // so the menu covers the pickers in the rows below.
-    <div ref={area} className={`relative flex min-w-0 justify-center ${open ? "z-40" : "z-10"}`}>
-      <button
-        ref={button}
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        title={names || undefined}
-        className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-option-hover ${FOCUS_RING}`}
-      >
-        {current}
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute top-full left-1/2 mt-1 w-60 -translate-x-1/2 rounded-lg border border-line-strong bg-white p-1.5 shadow-popover"
-        >
-          <div className={`px-2.5 pt-2 pb-1.5 ${LABEL}`}>ASSIGN TO</div>
-          {members.map((member) => {
-            const selected = assignees.some((a) => a.id === member.id);
-            return (
-              <button
-                key={member.id}
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={selected}
-                onClick={() => onToggleAssignee(member.id)}
-                className={`flex min-h-9.5 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-option-hover ${FOCUS_RING}`}
-              >
-                <Avatar member={member} />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-small text-ink">{member.name}</span>
-                  <span className="text-tiny text-ink-muted capitalize">
-                    {member.role === "pm" ? "PM" : member.role}
-                  </span>
-                </span>
-                {selected && (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-accent" aria-hidden="true">
-                    <path d="M5 12.5l4.5 4.5L19 7.5" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 type SaveState = "idle" | "saving" | "saved" | "error";
+
+/** `list` with `item` added, or removed if it was there. */
+const toggled = (list: string[], item: string) =>
+  list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
 export function CommentRow({
   comment,
-  response,
-  onResponseChange,
-  completed,
-  onToggleCompleted,
-  onEditComment,
-  onDeleteComment,
   files,
-  attachedIds,
-  onToggleFile,
-  onUploadFile,
-  letterHref,
-  assignees,
   members,
-  onToggleAssignee,
   editable,
   open,
   onToggle,
-  openMenu,
-  onToggleMenu,
-  onCloseMenu,
+  onUpdate,
+  onEditComment,
+  onDeleteComment,
+  onUploadFile,
+  letterHref,
   isFirst,
   isLast,
 }: {
   comment: LedgerComment;
-  response: string;
-  onResponseChange: (value: string) => void;
-  completed: boolean;
-  onToggleCompleted: () => void;
-  onEditComment: (fields: CommentFields) => Promise<string | null>;
-  onDeleteComment: () => Promise<string | null>;
   files: LedgerFile[];
-  attachedIds: string[];
-  onToggleFile: (fileId: string) => void;
-  onUploadFile: (file: File) => Promise<boolean>;
-  /** The letter viewer, with this comment highlighted. */
-  letterHref: string;
-  assignees: Member[];
   members: Member[];
-  onToggleAssignee: (userId: string) => void;
   editable: boolean;
   open: boolean;
   onToggle: () => void;
-  openMenu: RowMenu | null;
-  onToggleMenu: (menu: RowMenu) => void;
-  onCloseMenu: () => void;
+  onUpdate: <K extends QuickField>(key: K, value: LedgerComment[K]) => void;
+  onEditComment: (fields: CommentFields) => Promise<string | null>;
+  onDeleteComment: () => Promise<string | null>;
+  onUploadFile: (file: File) => Promise<string | null>;
+  /** The letter viewer, with this comment highlighted. */
+  letterHref: string;
   isFirst: boolean;
   isLast: boolean;
 }) {
   const id = useId();
+  const { completed } = comment;
+  // The response is typed here, so keystrokes re-render only this row.
+  const [response, setResponse] = useState(comment.response);
   const status = STATUS[statusOf(comment.commentType, response, completed)];
   const primarySheet = comment.sheetRefs[0];
-  const attached = files.filter((file) => attachedIds.includes(file.id));
+  const attached = files.filter((file) => comment.attachmentIds.includes(file.id));
+  const toggleFile = (fileId: string) =>
+    onUpdate("attachmentIds", toggled(comment.attachmentIds, fileId));
   const [editingComment, setEditingComment] = useState(false);
   // The references panel steps aside while editing, so the form gets the full width.
   const hasRefs =
@@ -329,20 +168,17 @@ export function CommentRow({
     saveTimer.current = null;
     const request = ++latestSave.current;
     setSaveState("saving");
-    const saving = fetch(`/api/comments/${comment.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ response: value }),
-    }).catch(() => null);
+    const saving = patchComment(comment.id, { response: value });
     trackPendingSave(comment.id, () => saving.then(() => {}));
     const res = await saving;
-    if (request !== latestSave.current) return; // a newer save has started
+    // A newer edit is saving, or waiting to; it reports and untracks itself.
+    if (request !== latestSave.current || saveTimer.current) return;
     clearPendingSave(comment.id);
     setSaveState(!res?.ok ? "error" : value.trim() ? "saved" : "idle");
   }
 
   function changeResponse(value: string) {
-    onResponseChange(value);
+    setResponse(value);
     setSaveState("saving"); // unsaved from the first keystroke until the server confirms
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(value), 800);
@@ -359,23 +195,6 @@ export function CommentRow({
     save(response);
   }
 
-  const menuOpen = openMenu === "files";
-  const menuArea = useRef<HTMLDivElement>(null);
-  const menuButton = useRef<HTMLButtonElement>(null);
-  useDismiss(menuOpen, menuArea, menuButton, onCloseMenu);
-
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadFailed, setUploadFailed] = useState(false);
-
-  async function upload(file: File) {
-    setUploading(true);
-    setUploadFailed(false);
-    const ok = await onUploadFile(file);
-    setUploading(false);
-    setUploadFailed(!ok);
-  }
-
   return (
     <div
       className={`relative ${isFirst ? "" : "border-t border-line-row"} ${
@@ -383,7 +202,7 @@ export function CommentRow({
       } ${isLast ? "rounded-b-lg" : ""}`}
     >
       {/* The toggle stretches over the whole row (after:inset-0). The assignee picker
-          sits above it, since a menu can't go inside a button. */}
+          sits above it, since a popover can't go inside a button. */}
       <div
         className={`${ROW_GRID} relative min-h-15 items-center py-3 hover:bg-row-hover ${
           isLast && !open ? "rounded-b-lg" : ""
@@ -427,13 +246,10 @@ export function CommentRow({
           )}
         </span>
         <AssigneePicker
-          assignees={assignees}
+          assigneeIds={comment.assigneeIds}
           members={members}
           editable={editable}
-          open={openMenu === "assignee"}
-          onToggle={() => onToggleMenu("assignee")}
-          onClose={onCloseMenu}
-          onToggleAssignee={onToggleAssignee}
+          onToggle={(userId) => onUpdate("assigneeIds", toggled(comment.assigneeIds, userId))}
         />
         <span className="flex justify-center">
           <span className={`inline-flex items-center rounded-full px-2.25 py-0.75 text-xs font-medium ${status.className}`}>
@@ -452,17 +268,7 @@ export function CommentRow({
             <section className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between gap-3">
                 <div className={LABEL}>AHJ COMMENT</div>
-                <a
-                  href={letterHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`inline-flex items-center gap-0.5 rounded-xs text-small text-accent hover:text-accent-hover ${FOCUS_RING}`}
-                >
-                  View in letter
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M7 17L17 7M9 7h8v8" />
-                  </svg>
-                </a>
+                <ExternalLink href={letterHref}>View in letter</ExternalLink>
               </div>
               {editingComment ? (
                 <CommentEditor
@@ -524,9 +330,7 @@ export function CommentRow({
                   {attached.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {attached.map((file) => (
-                        <span key={file.id} className="inline-flex h-7 max-w-60 items-center rounded-chip bg-chip px-2.5 text-meta text-chip-ink">
-                          <span className="truncate">{file.name}</span>
-                        </span>
+                        <FileChip key={file.id} file={file} />
                       ))}
                     </div>
                   )}
@@ -570,32 +374,19 @@ export function CommentRow({
           {/* Spans the panel so completing sits at its right edge, under the references. */}
           {editable && (
             <div className="col-span-full flex items-start justify-between gap-3">
-              <div ref={menuArea} className="relative flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <button
-                  ref={menuButton}
-                  type="button"
-                  onClick={() => onToggleMenu("files")}
-                  aria-expanded={menuOpen}
-                  aria-haspopup="true"
-                  className={`${SECONDARY_BUTTON} ${FOCUS_RING}`}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                  Attach files
-                  {attached.length > 0 && (
-                    <span className="font-mono text-tiny text-ink-muted">({attached.length})</span>
-                  )}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-muted" aria-hidden="true">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <AttachFiles
+                  files={files}
+                  attachedIds={comment.attachmentIds}
+                  onToggle={toggleFile}
+                  onUpload={onUploadFile}
+                />
 
                 {!editingComment && (
                   <button
                     type="button"
                     onClick={() => setEditingComment(true)}
-                    className={`${SECONDARY_BUTTON} ${FOCUS_RING}`}
+                    className={SECONDARY_BUTTON}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 20h9" />
@@ -606,109 +397,37 @@ export function CommentRow({
                 )}
 
                 {attached.map((file) => (
-                  <span key={file.id} className="inline-flex h-7 max-w-60 items-center gap-1.5 rounded-chip bg-chip pr-1 pl-2.5 text-meta text-chip-ink">
-                    <span className="truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => onToggleFile(file.id)}
-                      aria-label={`Remove ${file.name}`}
-                      className={`inline-flex size-5.5 flex-none cursor-pointer items-center justify-center rounded ${FOCUS_RING}`}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                        <path d="M6 6l12 12M18 6L6 18" />
-                      </svg>
-                    </button>
-                  </span>
+                  <FileChip key={file.id} file={file} onRemove={() => toggleFile(file.id)} />
                 ))}
-
-                {menuOpen && (
-                  <div className="absolute top-11 left-0 z-20 w-95 rounded-lg border border-line-strong bg-white p-1.5 shadow-popover">
-                    <div className={`px-2.5 pt-2 pb-1.5 ${LABEL}`}>PROJECT FILES</div>
-                    {files.length === 0 && (
-                      <p className="px-2.5 py-2 text-small text-ink-muted">
-                        No files in this package yet.
-                      </p>
-                    )}
-                    {files.map((file) => (
-                      <label
-                        key={file.id}
-                        htmlFor={`${id}-file-${file.id}`}
-                        className="flex min-h-9.5 cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.75 hover:bg-option-hover"
-                      >
-                        <input
-                          id={`${id}-file-${file.id}`}
-                          type="checkbox"
-                          checked={attachedIds.includes(file.id)}
-                          onChange={() => onToggleFile(file.id)}
-                          className={`size-4 flex-none accent-accent ${FOCUS_RING}`}
-                        />
-                        <span className="flex min-w-0 flex-col">
-                          <span className="truncate text-small text-ink">{file.name}</span>
-                          <span className="text-tiny text-ink-muted">{file.meta}</span>
-                        </span>
-                      </label>
-                    ))}
-                    <div className="mt-1 border-t border-line-row pt-1">
-                      <button
-                        type="button"
-                        disabled={uploading}
-                        onClick={() => fileInput.current?.click()}
-                        className={`flex min-h-9.5 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.75 text-left text-small text-ink hover:bg-option-hover disabled:opacity-50 ${FOCUS_RING}`}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flex-none text-ink-muted" aria-hidden="true">
-                          <path d="M12 5v14M5 12h14" />
-                        </svg>
-                        {uploading ? "Uploading…" : "Upload new file"}
-                      </button>
-                      <input
-                        ref={fileInput}
-                        type="file"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) upload(file);
-                          event.target.value = "";
-                        }}
-                      />
-                      {uploadFailed && (
-                        <p className="px-2.5 pb-1.5 text-tiny text-status-open-ink">
-                          Upload failed. Please try again.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="flex flex-none items-center gap-3">
                 <span aria-live="polite" className="inline-flex h-9 items-center gap-1.5 text-xs whitespace-nowrap text-ink-muted">
                   {saveState === "saved" && (
                     <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-saved" aria-hidden="true">
-                        <path d="M5 12.5l4.5 4.5L19 7.5" />
-                      </svg>
+                      <CheckIcon className="text-saved" />
                       {completed ? "Saved" : "Draft saved"}
                     </>
                   )}
                   {saveState === "saving" && (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" className="opacity-25" />
-                      <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
-                    </svg>
-                    Saving…
-                  </>
-                )}
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" className="opacity-25" />
+                        <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
+                      </svg>
+                      Saving…
+                    </>
+                  )}
                   {saveState === "error" && (
                     <span className="text-status-open-ink">Couldn&apos;t save</span>
                   )}
                 </span>
                 <button
                   type="button"
-                  onClick={onToggleCompleted}
+                  onClick={() => onUpdate("completed", !completed)}
                   disabled={!canComplete}
                   title={canComplete ? undefined : "Write a response first"}
-                  className={`${completed ? SECONDARY_BUTTON : PRIMARY_BUTTON} ${FOCUS_RING}`}
+                  className={completed ? SECONDARY_BUTTON : PRIMARY_BUTTON}
                 >
                   {completed ? "Reopen" : "Mark completed"}
                 </button>

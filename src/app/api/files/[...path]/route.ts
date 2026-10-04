@@ -1,5 +1,5 @@
 import { serveFile } from "@/lib/serve-file";
-import { UPLOADS_DIR } from "@/lib/uploads";
+import { UPLOADS_DIR } from "@/lib/storage";
 
 export async function GET(
   _request: Request,

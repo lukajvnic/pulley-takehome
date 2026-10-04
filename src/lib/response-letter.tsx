@@ -1,6 +1,6 @@
 import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { db } from "@/lib/db";
-import { responseLetterFileName } from "@/lib/format";
+import { longDate, responseLetterFileName } from "@/lib/format";
 
 /** Everything the response letter shows, straight from the database. */
 const loadLetter = (letterId: string) =>
@@ -70,7 +70,6 @@ const styles = StyleSheet.create({
   number: { width: 40, fontFamily: "Helvetica-Bold" },
   itemBody: { flex: 1 },
   comment: { color: MUTED, fontSize: 9.5, marginBottom: 4 },
-  label: { fontFamily: "Helvetica-Bold" },
   // Anchored from the top: react-pdf misplaces render-prop text positioned by
   // `bottom`. 752 of the page's 792pt leaves the same margin as the header.
   footer: { position: "absolute", top: 752, fontSize: 8.5, color: MUTED },
@@ -112,9 +111,7 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
       <Page size="LETTER" style={styles.page}>
         {draft && <Text style={styles.draft} fixed>DRAFT · NOT SUBMITTED</Text>}
 
-        <Text style={styles.block}>
-          {date.toLocaleDateString("en-US", { dateStyle: "long" })}
-        </Text>
+        <Text style={styles.block}>{longDate(date)}</Text>
 
         {/* Addressed to the jurisdiction, not the reviewer: many letters route
             resubmittals to an intake desk or portal, and the permit number in
@@ -160,7 +157,7 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
                 <View style={styles.itemBody}>
                   <Text style={styles.comment}>{comment.text}</Text>
                   <Text>
-                    <Text style={styles.label}>Response: </Text>
+                    <Text style={styles.bold}>Response: </Text>
                     {responseText(comment, draft)}
                   </Text>
                   {comment.attachments.length > 0 && (
@@ -176,7 +173,7 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
 
         {enclosures.length > 0 && (
           <View style={{ marginTop: 8 }} wrap={false}>
-            <Text style={styles.label}>Enclosures</Text>
+            <Text style={styles.bold}>Enclosures</Text>
             {enclosures.map((name) => (
               <Text key={name}>· {name}</Text>
             ))}

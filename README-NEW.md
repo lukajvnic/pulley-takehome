@@ -27,16 +27,16 @@ What moved: `kind` and `status` went from `Document` to `SubmittalDocument`, sin
 |---|---|---|---|
 | `POST /api/approvals/:id/comment-letters` | Uploads the jurisdiction's letter and moves the approval to `comments`. Responds right away; parsing runs after. | Writes `Document` + `CommentLetter` (round = latest submission), `Approval.status`; the PDF to `uploads/` | `saveUpload()`, then `parseCommentLetter()` in `after()` → OpenAI → `Comment` rows |
 | `PATCH /api/approvals/:id` | Changes status. On "Submit to jurisdiction": holds back unanswered corrections (409 until confirmed), stores the final response letter, records the submission. | `Approval`, `Comment` (unanswered count), `Submission`, `SubmittalDocument`; the PDF to `generated-pdfs/` | `renderResponseLetter()`, `saveGeneratedPdf()`, `recordSubmission()` |
-| `POST /api/comment-letters/:id/comments` | Adds a comment the parser missed. | Writes `Comment` (next position) | `findLetter()`, `readCommentFields()`, `areProjectMembers()` |
-| `PATCH /api/comments/:id` | Edits a comment: its text and fields, response, completed, assignees, attached files. | `Comment`, assignee and attachment links | `findLetter()`, `readCommentFields()`, `areProjectMembers()` |
-| `DELETE /api/comments/:id` | Deletes a comment. | `Comment` | `findLetter()` |
-| `POST /api/approvals/:id/documents` | Uploads a new file and optionally attaches it to a comment ("Upload new file"). | Writes `Document` + `SubmittalDocument`; the file to `uploads/` | `saveUpload()`, `findLetter()` |
-| `POST /api/documents/:id/upload` | Fills a checklist item before the first submission (existing route, now writes status on the subtype). | `Document`, `SubmittalDocument.status` | `saveUpload()` |
+| `POST /api/comment-letters/:id/comments` | Adds a comment the parser missed. | Writes `Comment` (next position) | `findLetter()`, `readCommentFields()` |
+| `PATCH /api/comments/:id` | Edits a comment: its text and fields, response, completed, assignees, attached files. | `Comment`, assignee and attachment links | `findEditableComment()`, `readCommentFields()`, `areProjectMembers()`, `arePackageFiles()` |
+| `DELETE /api/comments/:id` | Deletes a comment. | `Comment` | `findEditableComment()` |
+| `POST /api/approvals/:id/documents` | Uploads a new file for a comment's response ("Upload new file"): it joins the package, attached to that comment. | Writes `Document` + `SubmittalDocument`; the file to `uploads/` | `findEditableComment()`, `saveUpload()` |
+| `POST /api/documents/:id/upload` | Fills a checklist item before the first submission (existing route, now writes status on the subtype, and refuses files already uploaded). | `Document`, `SubmittalDocument.status` | `saveUpload()` |
 | `GET /api/comment-letters/:id/response-letter` | Downloads the response letter as it stands. Generated fresh each time, marked draft while editable, never stored. | Reads the letter, comments, responses, attachments | `renderResponseLetter()` |
 | `GET /api/files/*` | Serves uploaded files. | `uploads/` | `serveFile()` |
 | `GET /api/generated-pdfs/*` | Serves submitted response letters. | `generated-pdfs/` | `serveFile()` |
 
-Comments can only change while their letter is the latest one and the approval is in `comments`; `findLetter()` enforces this for every comment route. Pages (`/approvals/:id`, `/letters/:id`) read Postgres directly as server components, so there are no GET endpoints for data.
+Comments can only change while their letter is the latest one and the approval is in `comments`; `findLetter()` / `findEditableComment()` enforce this for every comment route. Pages (`/approvals/:id`, `/letters/:id`) read Postgres directly as server components, so there are no GET endpoints for data.
 
 # UI Design
 

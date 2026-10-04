@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { displayNumber } from "@/lib/format";
+import { BackLink, ExternalLink } from "@/components/links";
 import { LetterViewer } from "@/components/letter-viewer/LetterViewer";
 
 export const dynamic = "force-dynamic";
@@ -17,40 +17,30 @@ export default async function LetterPage({
   const { letterId } = await params;
   const { comment: commentId } = await searchParams;
 
-  const letter = await db.commentLetter.findUnique({
-    where: { documentId: letterId },
-    include: { document: { include: { approval: true } } },
-  });
+  const [letter, comment] = await Promise.all([
+    db.commentLetter.findUnique({
+      where: { documentId: letterId },
+      include: { document: { include: { approval: { select: { name: true } } } } },
+    }),
+    commentId ? db.comment.findFirst({ where: { id: commentId, letterId } }) : null,
+  ]);
   if (!letter) notFound();
-  const comment = commentId
-    ? await db.comment.findFirst({ where: { id: commentId, letterId } })
-    : null;
 
   const { document } = letter;
   const fileUrl = `/api/files/${document.filePath}`;
 
   return (
-    <div className="flex flex-col gap-6 text-ink">
+    <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href={`/approvals/${document.approvalId}`}
-          className="text-sm text-gray-500 hover:text-gray-700"
-        >
-          ← {document.approval.name}
-        </Link>
+        <BackLink href={`/approvals/${document.approvalId}`}>{document.approval.name}</BackLink>
         <div className="mt-2 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-semibold">{document.name}</h1>
             <p className="mt-1 text-sm text-ink-muted">Review cycle {letter.round} comments</p>
           </div>
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1.5 flex-none text-small text-accent hover:text-accent-hover"
-          >
-            Original PDF ↗
-          </a>
+          <ExternalLink href={fileUrl} className="mt-1.5 flex-none">
+            Original PDF
+          </ExternalLink>
         </div>
       </div>
 

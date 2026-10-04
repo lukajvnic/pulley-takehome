@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { fail } from "@/lib/http";
 
 const contentTypes: Record<string, string> = {
   ".pdf": "application/pdf",
@@ -16,7 +17,7 @@ export async function serveFile(dir: string, segments: string[]) {
 
   // Prevent path traversal outside the directory.
   if (!path.resolve(filePath).startsWith(path.resolve(dir) + path.sep)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return fail(404, "Not found");
   }
 
   try {
@@ -29,6 +30,6 @@ export async function serveFile(dir: string, segments: string[]) {
       },
     });
   } catch {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return fail(404, "Not found");
   }
 }

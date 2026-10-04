@@ -5,7 +5,7 @@ function formatBytes(bytes: number) {
 
 /**
  * The name a file was uploaded with. Stored paths are "<prefix>-<timestamp>-<name>"
- * (see saveUpload); other paths, like seeded files, are returned as they are.
+ * (see storage.ts); other paths, like seeded files, are returned as they are.
  */
 export function uploadedFileName(filePath: string) {
   return filePath.match(/^.*?-\d{13}-(.+)$/)?.[1] ?? filePath;
@@ -24,3 +24,14 @@ export const responseLetterFileName = (round: number) =>
 /** "4" → "004", as the ledger shows comment numbers. Labels like "A-1" or "TE 1" stay as printed. */
 export const displayNumber = (number: string) =>
   /^\d+$/.test(number) ? number.padStart(3, "0") : number;
+
+/** "October 4, 2026". */
+export const longDate = (date: Date) => date.toLocaleDateString("en-US", { dateStyle: "long" });
+
+/** "1 document", "3 documents". */
+export const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+/** "2026-07-14" → noon UTC that day, so the date doesn't shift across timezones. */
+export function parseDay(value: string | null) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : null;
+}

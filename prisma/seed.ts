@@ -1,11 +1,12 @@
-import { PrismaClient, type CommentType } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
 import { recordSubmission } from "../src/lib/submissions";
+import { UPLOADS_DIR } from "../src/lib/storage";
+import { parseDay } from "../src/lib/format";
+import type { ParsedLetter } from "../src/lib/parse-comment-letter";
 
 const db = new PrismaClient();
-
-const UPLOADS = path.join(process.cwd(), "uploads");
 
 /**
  * Writes a tiny one-page PDF so seeded documents are real, openable files
@@ -35,8 +36,8 @@ function writePlaceholderPdf(filename: string, title: string): string {
   }
   pdf += `trailer\n<</Size ${objects.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF\n`;
 
-  fs.mkdirSync(UPLOADS, { recursive: true });
-  fs.writeFileSync(path.join(UPLOADS, filename), Buffer.from(pdf, "latin1"));
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(UPLOADS_DIR, filename), Buffer.from(pdf, "latin1"));
   return filename;
 }
 
@@ -72,26 +73,13 @@ async function seedCommentLetter(approvalId: string, letterName: string) {
       path.join(process.cwd(), "prisma", "seed-letters", letterName.replace(/\.pdf$/, ".json")),
       "utf8"
     )
-  ) as {
-    letterDate: string | null;
-    reviewerName: string | null;
-    comments: {
-      number: string;
-      discipline: string | null;
-      title: string | null;
-      page: number | null;
-      text: string;
-      sheetRefs: string[];
-      codeRefs: string[];
-      commentType: CommentType;
-    }[];
-  };
+  ) as ParsedLetter;
 
   const filename = `seed-${++seq}-${letterName}`;
-  fs.mkdirSync(UPLOADS, { recursive: true });
-  fs.copyFileSync(path.join(process.cwd(), "sample-letters", letterName), path.join(UPLOADS, filename));
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  fs.copyFileSync(path.join(process.cwd(), "sample-letters", letterName), path.join(UPLOADS_DIR, filename));
 
-  const letterDate = parsed.letterDate ? new Date(`${parsed.letterDate}T12:00:00Z`) : null;
+  const letterDate = parseDay(parsed.letterDate);
   await db.document.create({
     data: {
       approvalId,
@@ -125,9 +113,9 @@ async function main() {
   await db.user.deleteMany();
 
   // Old seed files, so re-running doesn't accumulate junk.
-  if (fs.existsSync(UPLOADS)) {
-    for (const f of fs.readdirSync(UPLOADS)) {
-      if (f.startsWith("seed-")) fs.unlinkSync(path.join(UPLOADS, f));
+  if (fs.existsSync(UPLOADS_DIR)) {
+    for (const f of fs.readdirSync(UPLOADS_DIR)) {
+      if (f.startsWith("seed-")) fs.unlinkSync(path.join(UPLOADS_DIR, f));
     }
   }
 

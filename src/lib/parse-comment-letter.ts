@@ -3,7 +3,8 @@ import path from "node:path";
 import OpenAI from "openai";
 import { CommentType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { UPLOADS_DIR } from "@/lib/uploads";
+import { UPLOADS_DIR } from "@/lib/storage";
+import { parseDay } from "@/lib/format";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
 
@@ -30,7 +31,7 @@ Skip:
 
 letterDate is the date the letter was issued (YYYY-MM-DD). reviewerName is the reviewer or plans examiner who wrote it. Use null when the letter doesn't say.`;
 
-type ParsedLetter = {
+export type ParsedLetter = {
   letterDate: string | null;
   reviewerName: string | null;
   comments: {
@@ -84,17 +85,12 @@ const SCHEMA = {
   },
 };
 
-/** "2026-07-14" → noon UTC that day, so the date doesn't shift across timezones. */
-function toDate(value: string | null) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : null;
-}
-
 /** Sends a letter PDF to the model and returns what it extracted. */
-export async function extractComments(pdf: Buffer, filename: string, model = MODEL) {
+async function extractComments(pdf: Buffer, filename: string): Promise<ParsedLetter> {
   // The SDK retries rate limits, server errors and timeouts with backoff.
   const openai = new OpenAI({ maxRetries: 3 });
   const response = await openai.responses.create({
-    model,
+    model: MODEL,
     instructions: INSTRUCTIONS,
     input: [
       {
@@ -113,7 +109,7 @@ export async function extractComments(pdf: Buffer, filename: string, model = MOD
       format: { type: "json_schema", name: "comment_letter", schema: SCHEMA, strict: true },
     },
   });
-  return { parsed: JSON.parse(response.output_text) as ParsedLetter, usage: response.usage };
+  return JSON.parse(response.output_text);
 }
 
 /**
@@ -125,7 +121,7 @@ export async function parseCommentLetter(letterId: string) {
   try {
     const document = await db.document.findUniqueOrThrow({ where: { id: letterId } });
     const pdf = await fs.readFile(path.join(UPLOADS_DIR, document.filePath!));
-    const { parsed } = await extractComments(pdf, document.name);
+    const parsed = await extractComments(pdf, document.name);
 
     await db.$transaction([
       db.comment.createMany({
@@ -139,7 +135,7 @@ export async function parseCommentLetter(letterId: string) {
         where: { documentId: letterId },
         data: {
           parseStatus: "done",
-          letterDate: toDate(parsed.letterDate),
+          letterDate: parseDay(parsed.letterDate),
           reviewerName: parsed.reviewerName,
         },
       }),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { flushPendingSaves } from "@/lib/pending-saves";
+import { LINK } from "@/components/styles";
 
 /**
  * Downloads a file the server generates on request. Saves still in progress
@@ -31,12 +32,16 @@ export function DownloadButton({ href, fileName }: { href: string; fileName: str
 
   return (
     <span className="flex flex-none items-center gap-3">
-      {failed && <span className="text-tiny text-status-open-ink">Couldn&apos;t generate</span>}
+      {failed && (
+        <span role="alert" className="text-tiny text-status-open-ink">
+          Couldn&apos;t generate
+        </span>
+      )}
       <button
         type="button"
         onClick={download}
         disabled={busy}
-        className="cursor-pointer text-small text-accent hover:text-accent-hover disabled:cursor-default disabled:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={`cursor-pointer text-small ${LINK} disabled:cursor-default disabled:text-ink-muted`}
       >
         {busy ? "Generating…" : "Download"}
       </button>

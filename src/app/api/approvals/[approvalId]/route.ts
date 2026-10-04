@@ -3,7 +3,8 @@ import { ApprovalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { renderResponseLetter } from "@/lib/response-letter";
 import { recordSubmission } from "@/lib/submissions";
-import { saveGeneratedPdf } from "@/lib/generated-pdfs";
+import { saveGeneratedPdf } from "@/lib/storage";
+import { fail } from "@/lib/http";
 
 // Simplistic status changes: any status can move to any other status.
 export async function PATCH(
@@ -12,18 +13,13 @@ export async function PATCH(
 ) {
   const { approvalId } = await params;
   const approval = await db.approval.findUnique({ where: { id: approvalId } });
-  if (!approval) {
-    return NextResponse.json({ error: "Approval not found" }, { status: 404 });
-  }
+  if (!approval) return fail(404, "Approval not found");
 
   const body = await request.json().catch(() => null);
-  const status = body?.status;
-  if (!status || !(status in ApprovalStatus)) {
-    return NextResponse.json(
-      { error: `status must be one of: ${Object.keys(ApprovalStatus).join(", ")}` },
-      { status: 400 }
-    );
+  if (typeof body?.status !== "string" || !Object.hasOwn(ApprovalStatus, body.status)) {
+    return fail(400, `status must be one of: ${Object.keys(ApprovalStatus).join(", ")}`);
   }
+  const status: ApprovalStatus = body.status;
 
   // Every move into submitted sends a package to the jurisdiction: it records a
   // submission, and submittedAt tracks the latest one.
@@ -40,6 +36,10 @@ export async function PATCH(
         orderBy: { round: "desc" },
       })
     : null;
+  // Until parsing finishes there's nothing to answer yet.
+  if (letter?.parseStatus === "processing") {
+    return fail(409, "The comment letter is still being read");
+  }
 
   // Corrections not marked completed would go out unanswered. The client asks
   // the team to confirm first, then resends with `confirmUnanswered`.
@@ -54,12 +54,15 @@ export async function PATCH(
       );
     }
   }
-  const response = letter
-    ? await renderResponseLetter(letter.documentId, { draft: false, date: now })
-    : null;
-  const responsePath = response
-    ? await saveGeneratedPdf(response.pdf, response.fileName, `response-${approval.id}`)
-    : null;
+
+  let responsePath: string | null = null;
+  if (letter) {
+    const { pdf, fileName } = await renderResponseLetter(letter.documentId, {
+      draft: false,
+      date: now,
+    });
+    responsePath = await saveGeneratedPdf(pdf, fileName, `response-${approval.id}`);
+  }
 
   const updated = await db.$transaction(async (tx) => {
     if (submitting) {
@@ -67,7 +70,7 @@ export async function PATCH(
       const submission = await recordSubmission(tx, approval.id, now, {
         attachedOnly: responding,
       });
-      if (response && responsePath) {
+      if (responsePath) {
         await tx.document.create({
           data: {
             approvalId: approval.id,

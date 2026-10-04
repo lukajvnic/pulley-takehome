@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ApprovalStatus } from "@prisma/client";
 
 const styles: Record<ApprovalStatus, string> = {
@@ -14,12 +15,14 @@ const labels: Record<ApprovalStatus, string> = {
   approved: "Approved",
 };
 
-export function StatusPill({ status }: { status: ApprovalStatus }) {
+export function Pill({ className, children }: { className: string; children: ReactNode }) {
   return (
-    <span
-      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status]}`}
-    >
-      {labels[status]}
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}>
+      {children}
     </span>
   );
+}
+
+export function StatusPill({ status }: { status: ApprovalStatus }) {
+  return <Pill className={styles[status]}>{labels[status]}</Pill>;
 }

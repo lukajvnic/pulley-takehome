@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { findLetter } from "@/lib/comments";
+import { fail } from "@/lib/http";
 import { renderResponseLetter } from "@/lib/response-letter";
 
 // Downloads the response letter as it stands, generated fresh from the saved
@@ -11,9 +12,7 @@ export async function GET(
 ) {
   const { letterId } = await params;
   const found = await findLetter(letterId);
-  if (!found) {
-    return NextResponse.json({ error: "Comment letter not found" }, { status: 404 });
-  }
+  if (!found) return fail(404, "Comment letter not found");
 
   // While responses can still change, the PDF is a draft.
   const { pdf, fileName } = await renderResponseLetter(letterId, { draft: found.editable });

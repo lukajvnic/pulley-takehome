@@ -1,4 +1,4 @@
-import { GENERATED_PDFS_DIR } from "@/lib/generated-pdfs";
+import { GENERATED_PDFS_DIR } from "@/lib/storage";
 import { serveFile } from "@/lib/serve-file";
 
 export async function GET(
