@@ -204,15 +204,16 @@ async function LetterComments({
       document: true,
       comments: {
         orderBy: { position: "asc" },
-        include: { assignee: true, attachments: { select: { documentId: true } } },
+        include: {
+          assignees: { select: { id: true } },
+          attachments: { select: { documentId: true } },
+        },
       },
     },
   });
   if (!letter) return null;
 
-  const caption = [approval.permit.permitNumber, `Review cycle ${letter.round}`]
-    .filter(Boolean)
-    .join(" · ");
+  const caption = `Review cycle ${letter.round}`;
   const letterUrl = `/api/files/${letter.document.filePath}`;
   const letterLink = (
     <a
@@ -244,7 +245,7 @@ async function LetterComments({
     commentType: c.commentType,
     response: c.response ?? "",
     completed: c.completed,
-    assignee: c.assignee && { id: c.assignee.id, name: c.assignee.name },
+    assigneeIds: c.assignees.map((a) => a.id),
     attachmentIds: c.attachments.map((a) => a.documentId),
   }));
 

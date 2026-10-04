@@ -37,9 +37,11 @@ export function CommentLedger({
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<{ commentId: string; kind: RowMenu } | null>(null);
-  const [assignees, setAssignees] = useState<Record<string, string | null>>(() =>
-    Object.fromEntries(comments.map((c) => [c.id, c.assignee?.id ?? null]))
+  const [assignees, setAssignees] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(comments.map((c) => [c.id, c.assigneeIds]))
   );
+  // Once submitted, the list starts collapsed to keep the page short.
+  const [listOpen, setListOpen] = useState(editable);
   const [responses, setResponses] = useState<Record<string, string>>(() =>
     Object.fromEntries(comments.map((c) => [c.id, c.response]))
   );
@@ -62,13 +64,16 @@ export function CommentLedger({
     if (!res?.ok) setCompleted((current) => ({ ...current, [commentId]: !next }));
   }
 
-  async function assign(commentId: string, userId: string | null) {
-    const previous = assignees[commentId] ?? null;
-    setAssignees((current) => ({ ...current, [commentId]: userId }));
+  async function toggleAssignee(commentId: string, userId: string) {
+    const previous = assignees[commentId] ?? [];
+    const next = previous.includes(userId)
+      ? previous.filter((id) => id !== userId)
+      : [...previous, userId];
+    setAssignees((current) => ({ ...current, [commentId]: next }));
     const res = await fetch(`/api/comments/${commentId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assigneeId: userId }),
+      body: JSON.stringify({ assigneeIds: next }),
     }).catch(() => null);
     if (!res?.ok) setAssignees((current) => ({ ...current, [commentId]: previous }));
   }
@@ -122,69 +127,86 @@ export function CommentLedger({
     return true;
   }
 
-  const awaiting = comments.filter(
-    (c) => c.commentType === "correction" && !completed[c.id]
-  ).length;
+  const total = `${comments.length} comment${comments.length === 1 ? "" : "s"}`;
+  const summary = editable
+    ? `${total} · ${comments.filter((c) => c.commentType === "correction" && !completed[c.id]).length} awaiting response`
+    : `${total} · ${comments.filter((c) => completed[c.id]).length} completed`;
 
   return (
     <section className="text-ink">
-      <header className="mb-5 flex items-end justify-between gap-6">
+      <header className={`flex items-end justify-between gap-6 ${listOpen ? "mb-5" : ""}`}>
         <div className="flex flex-col gap-1.5">
           <div className="font-mono text-xs tracking-caption text-ink-muted uppercase">{caption}</div>
           <h2 className="text-2xl font-semibold">Plan review comments</h2>
         </div>
         {!notice && (
-          <div className="text-small text-ink-muted">
-            {comments.length} comment{comments.length === 1 ? "" : "s"} · {awaiting} awaiting
-            response
+          <div className="flex items-center gap-4 text-small text-ink-muted">
+            {summary}
+            {!editable && (
+              <button
+                type="button"
+                onClick={() => setListOpen((current) => !current)}
+                aria-expanded={listOpen}
+                className="inline-flex cursor-pointer items-center gap-1 font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                {listOpen ? "Hide comments" : "Show comments"}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${listOpen ? "rotate-180" : ""}`} aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            )}
           </div>
         )}
       </header>
 
-      <div className="rounded-lg border border-line bg-white">
-        <div
-          className={`${ROW_GRID} border-b border-line-header py-2.5 font-mono text-caption tracking-caption text-ink-muted`}
-        >
-          <span />
-          <span>NO.</span>
-          <span>COMMENT</span>
-          <span className="text-center">ASSIGNED</span>
-          <span className="text-center">STATUS</span>
-        </div>
+      {(listOpen || notice) && (
+        <div className={`rounded-lg border border-line bg-white ${listOpen ? "" : "mt-5"}`}>
+          <div
+            className={`${ROW_GRID} border-b border-line-header py-2.5 font-mono text-caption tracking-caption text-ink-muted`}
+          >
+            <span />
+            <span>NO.</span>
+            <span>COMMENT</span>
+            <span className="text-center">ASSIGNED</span>
+            <span className="text-center">STATUS</span>
+          </div>
 
-        {notice ? (
-          <p className="px-5 py-5 text-sm text-ink-secondary">{notice}</p>
-        ) : (
-          comments.map((comment, i) => (
-            <CommentRow
-              key={comment.id}
-              comment={comment}
-              response={responses[comment.id] ?? ""}
-              onResponseChange={(value) =>
-                setResponses((current) => ({ ...current, [comment.id]: value }))
-              }
-              completed={!!completed[comment.id]}
-              onToggleCompleted={() => toggleCompleted(comment.id)}
-              files={files}
-              attachedIds={attachments[comment.id] ?? []}
-              onToggleFile={(fileId) => toggleFile(comment.id, fileId)}
-              onUploadFile={(file) => uploadFile(comment.id, file)}
-              letterUrl={letterUrl}
-              assignee={members.find((m) => m.id === assignees[comment.id]) ?? null}
-              members={members}
-              onAssign={(userId) => assign(comment.id, userId)}
-              editable={editable}
-              open={!!open[comment.id]}
-              onToggle={() => toggleRow(comment.id)}
-              openMenu={menu?.commentId === comment.id ? menu.kind : null}
-              onToggleMenu={(kind) => toggleMenu(comment.id, kind)}
-              onCloseMenu={() => setMenu(null)}
-              isFirst={i === 0}
-              isLast={i === comments.length - 1}
-            />
-          ))
-        )}
-      </div>
+          {notice ? (
+            <p className="px-5 py-5 text-sm text-ink-secondary">{notice}</p>
+          ) : (
+            comments.map((comment, i) => (
+              <CommentRow
+                key={comment.id}
+                comment={comment}
+                response={responses[comment.id] ?? ""}
+                onResponseChange={(value) =>
+                  setResponses((current) => ({ ...current, [comment.id]: value }))
+                }
+                completed={!!completed[comment.id]}
+                onToggleCompleted={() => toggleCompleted(comment.id)}
+                files={files}
+                attachedIds={attachments[comment.id] ?? []}
+                onToggleFile={(fileId) => toggleFile(comment.id, fileId)}
+                onUploadFile={(file) => uploadFile(comment.id, file)}
+                letterUrl={letterUrl}
+                assignees={(assignees[comment.id] ?? []).flatMap(
+                  (userId) => members.find((m) => m.id === userId) ?? []
+                )}
+                members={members}
+                onToggleAssignee={(userId) => toggleAssignee(comment.id, userId)}
+                editable={editable}
+                open={!!open[comment.id]}
+                onToggle={() => toggleRow(comment.id)}
+                openMenu={menu?.commentId === comment.id ? menu.kind : null}
+                onToggleMenu={(kind) => toggleMenu(comment.id, kind)}
+                onCloseMenu={() => setMenu(null)}
+                isFirst={i === 0}
+                isLast={i === comments.length - 1}
+              />
+            ))
+          )}
+        </div>
+      )}
     </section>
   );
 }

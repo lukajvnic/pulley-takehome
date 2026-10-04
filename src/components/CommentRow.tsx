@@ -14,7 +14,7 @@ export type LedgerComment = {
   commentType: CommentType;
   response: string;
   completed: boolean;
-  assignee: { id: string; name: string } | null;
+  assigneeIds: string[];
   attachmentIds: string[];
 };
 
@@ -153,74 +153,84 @@ function useDismiss(
   }, [open, area, button, onClose]);
 }
 
-function Avatar({ member }: { member: Member }) {
+// The first avatar sits on top of the ones it overlaps.
+const STACK_ORDER = ["z-30", "z-20", "z-10"];
+
+function Avatar({ member, className = "" }: { member: Member; className?: string }) {
   return (
     <span
       className={`inline-flex size-6.5 flex-none items-center justify-center rounded-full text-micro font-semibold tracking-wide ring-2 ring-white ${avatarColor(
         member.id
-      )}`}
+      )} ${className}`}
     >
       {initials(member.name)}
     </span>
   );
 }
 
-/** Who's answering the comment. Opens a list of the project's team to pick from. */
+/** Who's answering the comment. Opens a list of the project's team to pick several from. */
 function AssigneePicker({
-  assignee,
+  assignees,
   members,
   editable,
   open,
   onToggle,
   onClose,
-  onAssign,
+  onToggleAssignee,
 }: {
-  assignee: Member | null;
+  assignees: Member[];
   members: Member[];
   editable: boolean;
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onAssign: (userId: string | null) => void;
+  onToggleAssignee: (userId: string) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   useDismiss(open, area, button, onClose);
 
-  const current = assignee ? (
-    <>
-      <Avatar member={assignee} />
-      <span className="truncate text-meta text-ink-secondary">{shortName(assignee.name)}</span>
-    </>
-  ) : (
-    <span className="text-meta text-ink-muted">Unassigned</span>
-  );
+  const names = assignees.map((member) => member.name).join(", ");
+  const current =
+    assignees.length > 0 ? (
+      <>
+        <span className="flex flex-none">
+          {assignees.slice(0, STACK_ORDER.length).map((member, i) => (
+            <Avatar
+              key={member.id}
+              member={member}
+              className={`relative ${STACK_ORDER[i]} ${i > 0 ? "-ml-2" : ""}`}
+            />
+          ))}
+        </span>
+        <span className="truncate text-meta text-ink-secondary">
+          {shortName(assignees[0].name)}
+          {assignees.length > 1 && ` +${assignees.length - 1}`}
+        </span>
+      </>
+    ) : (
+      <span className="text-meta text-ink-muted">Unassigned</span>
+    );
 
   if (!editable) {
     return (
-      <span className="flex min-w-0 items-center justify-center gap-2" title={assignee?.name}>
+      <span className="flex min-w-0 items-center justify-center gap-2" title={names || undefined}>
         {current}
       </span>
     );
   }
 
-  function pick(userId: string | null) {
-    onAssign(userId);
-    onClose();
-    button.current?.focus();
-  }
-
   return (
-    // z-10 keeps it clickable above the row's stretched toggle; z-30 when open
+    // z-10 keeps it clickable above the row's stretched toggle; z-40 when open
     // so the menu covers the pickers in the rows below.
-    <div ref={area} className={`relative flex min-w-0 justify-center ${open ? "z-30" : "z-10"}`}>
+    <div ref={area} className={`relative flex min-w-0 justify-center ${open ? "z-40" : "z-10"}`}>
       <button
         ref={button}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-haspopup="menu"
-        title={assignee?.name}
+        title={names || undefined}
         className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-option-hover ${FOCUS_RING}`}
       >
         {current}
@@ -228,33 +238,27 @@ function AssigneePicker({
       {open && (
         <div
           role="menu"
-          className="absolute top-full left-1/2 z-20 mt-1 w-60 -translate-x-1/2 rounded-lg border border-line-strong bg-white p-1.5 shadow-popover"
+          className="absolute top-full left-1/2 mt-1 w-60 -translate-x-1/2 rounded-lg border border-line-strong bg-white p-1.5 shadow-popover"
         >
           <div className={`px-2.5 pt-2 pb-1.5 ${LABEL}`}>ASSIGN TO</div>
-          {[null, ...members].map((member) => {
-            const selected = (member?.id ?? null) === (assignee?.id ?? null);
+          {members.map((member) => {
+            const selected = assignees.some((a) => a.id === member.id);
             return (
               <button
-                key={member?.id ?? "unassigned"}
+                key={member.id}
                 type="button"
-                role="menuitemradio"
+                role="menuitemcheckbox"
                 aria-checked={selected}
-                onClick={() => pick(member?.id ?? null)}
+                onClick={() => onToggleAssignee(member.id)}
                 className={`flex min-h-9.5 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-option-hover ${FOCUS_RING}`}
               >
-                {member ? (
-                  <>
-                    <Avatar member={member} />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-small text-ink">{member.name}</span>
-                      <span className="text-tiny text-ink-muted capitalize">
-                        {member.role === "pm" ? "PM" : member.role}
-                      </span>
-                    </span>
-                  </>
-                ) : (
-                  <span className="flex-1 text-small text-ink-muted">Unassigned</span>
-                )}
+                <Avatar member={member} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-small text-ink">{member.name}</span>
+                  <span className="text-tiny text-ink-muted capitalize">
+                    {member.role === "pm" ? "PM" : member.role}
+                  </span>
+                </span>
                 {selected && (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-accent" aria-hidden="true">
                     <path d="M5 12.5l4.5 4.5L19 7.5" />
@@ -282,9 +286,9 @@ export function CommentRow({
   onToggleFile,
   onUploadFile,
   letterUrl,
-  assignee,
+  assignees,
   members,
-  onAssign,
+  onToggleAssignee,
   editable,
   open,
   onToggle,
@@ -304,9 +308,9 @@ export function CommentRow({
   onToggleFile: (fileId: string) => void;
   onUploadFile: (file: File) => Promise<boolean>;
   letterUrl: string;
-  assignee: Member | null;
+  assignees: Member[];
   members: Member[];
-  onAssign: (userId: string | null) => void;
+  onToggleAssignee: (userId: string) => void;
   editable: boolean;
   open: boolean;
   onToggle: () => void;
@@ -344,6 +348,7 @@ export function CommentRow({
 
   function changeResponse(value: string) {
     onResponseChange(value);
+    setSaveState("saving"); // unsaved from the first keystroke until the server confirms
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(value), 800);
   }
@@ -416,13 +421,13 @@ export function CommentRow({
           </span>
         </button>
         <AssigneePicker
-          assignee={assignee}
+          assignees={assignees}
           members={members}
           editable={editable}
           open={openMenu === "assignee"}
           onToggle={() => onToggleMenu("assignee")}
           onClose={onCloseMenu}
-          onAssign={onAssign}
+          onToggleAssignee={onToggleAssignee}
         />
         <span className="flex justify-center">
           <span className={`inline-flex items-center rounded-full px-2.25 py-0.75 text-xs font-medium ${status.className}`}>
@@ -629,7 +634,15 @@ export function CommentRow({
                       {completed ? "Saved" : "Draft saved"}
                     </>
                   )}
-                  {saveState === "saving" && "Saving…"}
+                  {saveState === "saving" && (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" className="opacity-25" />
+                      <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
+                    </svg>
+                    Saving…
+                  </>
+                )}
                   {saveState === "error" && (
                     <span className="text-status-open-ink">Couldn&apos;t save</span>
                   )}

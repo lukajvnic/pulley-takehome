@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { findLetter, isProjectMember, readCommentFields } from "@/lib/comments";
+import { areProjectMembers, findLetter, readCommentFields } from "@/lib/comments";
 
 async function findEditableComment(commentId: string) {
   const comment = await db.comment.findUnique({ where: { id: commentId } });
@@ -19,7 +19,7 @@ async function findEditableComment(commentId: string) {
   return { comment, approval: found.approval };
 }
 
-// Edits a comment: its parsed fields, the team's response, the assignee, and
+// Edits a comment: its parsed fields, the team's response, `assigneeIds`, and
 // `attachmentIds`, the submittal documents the response references (replaces
 // the current list).
 export async function PATCH(
@@ -39,13 +39,10 @@ export async function PATCH(
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
-  const { fields } = result;
-  if (
-    fields.assigneeId &&
-    !(await isProjectMember(approval.permit.projectId, fields.assigneeId))
-  ) {
+  const { assigneeIds, ...fields } = result.fields;
+  if (assigneeIds && !(await areProjectMembers(approval.permit.projectId, assigneeIds))) {
     return NextResponse.json(
-      { error: "Assignee must be a member of the project" },
+      { error: "Assignees must be members of the project" },
       { status: 400 }
     );
   }
@@ -74,6 +71,7 @@ export async function PATCH(
     where: { id: comment.id },
     data: {
       ...fields,
+      ...(assigneeIds ? { assignees: { set: assigneeIds.map((id) => ({ id })) } } : {}),
       ...(attachmentIds !== undefined
         ? {
             attachments: {
@@ -82,7 +80,7 @@ export async function PATCH(
           }
         : {}),
     },
-    include: { attachments: { include: { document: true } } },
+    include: { assignees: true, attachments: { include: { document: true } } },
   });
 
   return NextResponse.json(updated);

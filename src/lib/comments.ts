@@ -25,9 +25,11 @@ export async function findLetter(letterId: string) {
 }
 
 /** Only members of the project's team can be assigned its comments. */
-export async function isProjectMember(projectId: string, userId: string) {
-  const count = await db.projectMember.count({ where: { projectId, userId } });
-  return count > 0;
+export async function areProjectMembers(projectId: string, userIds: string[]) {
+  const count = await db.projectMember.count({
+    where: { projectId, userId: { in: userIds } },
+  });
+  return count === userIds.length;
 }
 
 export type CommentFields = {
@@ -40,7 +42,7 @@ export type CommentFields = {
   codeRefs?: string[];
   response?: string | null;
   completed?: boolean;
-  assigneeId?: string | null;
+  assigneeIds?: string[];
 };
 
 const isStringArray = (value: unknown): value is string[] =>
@@ -78,13 +80,13 @@ export function readCommentFields(
     if (typeof body.completed !== "boolean") return { error: "completed must be a boolean" };
     fields.completed = body.completed;
   }
-  for (const key of ["sheetRefs", "codeRefs"] as const) {
+  for (const key of ["sheetRefs", "codeRefs", "assigneeIds"] as const) {
     const value = body[key];
     if (value === undefined) continue;
     if (!isStringArray(value)) return { error: `${key} must be an array of strings` };
-    fields[key] = value;
+    fields[key] = key === "assigneeIds" ? [...new Set(value)] : value;
   }
-  for (const key of ["discipline", "title", "response", "assigneeId"] as const) {
+  for (const key of ["discipline", "title", "response"] as const) {
     const value = body[key];
     if (value === undefined) continue;
     if (value !== null && typeof value !== "string") {
