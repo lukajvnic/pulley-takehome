@@ -79,6 +79,7 @@ async function seedCommentLetter(approvalId: string, letterName: string) {
       number: string;
       discipline: string | null;
       title: string | null;
+      page: number | null;
       text: string;
       sheetRefs: string[];
       codeRefs: string[];

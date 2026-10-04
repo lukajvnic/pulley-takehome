@@ -55,7 +55,7 @@
 2) ~~add support for editing, adding, and deleting comments.~~ done
 3) ~~make architecture diagram~~ done: https://claude.ai/artifact/DkDvSscUdeqKsqCE2L4wF7
 4) update readme
-5) ensure letter is addressed to the right people (change to whom it may concern)
+5) ~~ensure letter is addressed to the right people (change to whom it may concern)~~ done
 6) potential deployment?
 
 ## possible expansions

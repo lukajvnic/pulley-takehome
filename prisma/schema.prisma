@@ -157,6 +157,7 @@ model Comment {
   position    Int // order within the letter
   discipline  String?
   title       String? // short summary written by the parser
+  page        Int? // page the comment starts on, from the parser
   text        String
   sheetRefs   String[]
   codeRefs    String[]

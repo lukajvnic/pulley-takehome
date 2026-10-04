@@ -409,7 +409,6 @@ function LetterComments({
         editable={editable}
         comments={comments}
         files={files}
-        letterUrl={letterUrl}
         members={members}
         // Comments can be added by hand once parsing has finished, including
         // when it failed or found nothing.

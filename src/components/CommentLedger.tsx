@@ -46,7 +46,6 @@ export function CommentLedger({
   editable,
   comments,
   files: initialFiles,
-  letterUrl,
   members,
   canAdd,
   notice,
@@ -56,7 +55,6 @@ export function CommentLedger({
   editable: boolean;
   comments: LedgerComment[];
   files: LedgerFile[];
-  letterUrl: string;
   members: Member[];
   canAdd: boolean;
   notice?: ReactNode;
@@ -229,7 +227,7 @@ export function CommentLedger({
           Plan review comments
           <span className="font-normal text-ink-muted">·</span>
           <a
-            href={letterUrl}
+            href={`/letters/${letterId}`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-0.5 text-small font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -273,6 +271,7 @@ export function CommentLedger({
               attachedIds={attachments[comment.id] ?? []}
               onToggleFile={(fileId) => toggleFile(comment.id, fileId)}
               onUploadFile={(file) => uploadFile(comment.id, file)}
+              letterHref={`/letters/${letterId}?comment=${comment.id}`}
               assignees={(assignees[comment.id] ?? []).flatMap(
                 (userId) => members.find((m) => m.id === userId) ?? []
               )}

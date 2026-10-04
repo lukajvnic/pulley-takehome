@@ -6,6 +6,7 @@
       "number": "1",
       "discipline": "BUILDING / ARCHITECTURAL",
       "title": "Recalculate assembly occupant load including fixed seating",
+      "page": 1,
       "text": "Sheet A-101: The occupant load calculation for the assembly area does not account for the fixed seating shown along the north wall. Recalculate the occupant load per CBC Table 1004.5 and revise the egress analysis accordingly.",
       "sheetRefs": [
         "A-101"
@@ -19,6 +20,7 @@
       "number": "2",
       "discipline": "BUILDING / ARCHITECTURAL",
       "title": "Show compliant accessible route slopes to main entrance",
+      "page": 1,
       "text": "Sheet A-201: The accessible route from the public right-of-way to the main entrance is not clearly identified. Provide a site plan detail demonstrating compliance with CBC 11B-402, including running slope and cross slope callouts.",
       "sheetRefs": [
         "A-201"
@@ -32,6 +34,7 @@
       "number": "3",
       "discipline": "BUILDING / ARCHITECTURAL",
       "title": "Provide compliant 36-inch egress door or justification",
+      "page": 1,
       "text": "The door schedule on Sheet A-601 lists Door 104 as a 32-inch clear width; however, this door serves an occupant load greater than 50 and is part of the required means of egress. Provide a minimum 36-inch door or justify per CBC 1010.1.1.",
       "sheetRefs": [
         "A-601"
@@ -45,6 +48,7 @@
       "number": "4",
       "discipline": "STRUCTURAL",
       "title": "Submit rooftop unit structural calculations or reinforcement details",
+      "page": 1,
       "text": "Sheets S-201 and S-202: The new rooftop mechanical units exceed 400 lbs and no structural calculations were provided for the supporting members. Submit calculations stamped by the engineer of record demonstrating adequacy of the existing roof framing, or provide reinforcement details.",
       "sheetRefs": [
         "S-201",
@@ -57,6 +61,7 @@
       "number": "5",
       "discipline": "STRUCTURAL",
       "title": "Coordinate ASCE 7 standards across plans and calculations",
+      "page": 1,
       "text": "The lateral analysis references ASCE 7-16 while the cover sheet lists ASCE 7-22. Coordinate the referenced standards across the drawing set and calculations. This appears on multiple sheets and in the calculation package dated May 2, 2026.",
       "sheetRefs": [],
       "codeRefs": [
@@ -69,6 +74,7 @@
       "number": "6",
       "discipline": "FIRE / LIFE SAFETY",
       "title": "Submit separate sprinkler tenant improvement permit application",
+      "page": 1,
       "text": "A fire sprinkler tenant improvement permit is required for the relocation of heads shown on Sheet FP-101. Submit a separate deferred submittal application through the Fire Prevention Bureau prior to rough inspection.",
       "sheetRefs": [
         "FP-101"
@@ -80,6 +86,7 @@
       "number": "7",
       "discipline": "FIRE / LIFE SAFETY",
       "title": "Add illuminated exit signage with battery backup",
+      "page": 1,
       "text": "Sheet E-501: Exit signage is not shown at the corridor intersection adjacent to Room 118. Provide illuminated exit signage per CBC 1013.1 with battery backup.",
       "sheetRefs": [
         "E-501"
@@ -93,6 +100,7 @@
       "number": "8",
       "discipline": "ZONING / PLANNING",
       "title": "Remove exterior signage or label it separately permitted",
+      "page": 2,
       "text": "The proposed exterior signage shown on elevation Sheet A-301 is not part of this permit scope and requires a separate sign permit. Either remove the signage from the drawings or note it as \"under separate permit.\" Contact the Planning Division at (555) 014-2200 with questions.",
       "sheetRefs": [
         "A-301"

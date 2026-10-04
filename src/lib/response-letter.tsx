@@ -97,7 +97,6 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
   const { approval } = letter.document;
   const { permit } = approval;
   const { project } = permit;
-  const reviewer = letter.reviewerName ?? "Plan Reviewer";
   // No auth yet, so the letter is signed by the project's PM.
   const signer =
     project.members.find((m) => m.user.role === "pm")?.user ?? project.members[0]?.user;
@@ -117,10 +116,10 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
           {date.toLocaleDateString("en-US", { dateStyle: "long" })}
         </Text>
 
-        <View style={styles.block}>
-          <Text>{reviewer}</Text>
-          <Text>{project.ahjName}</Text>
-        </View>
+        {/* Addressed to the jurisdiction, not the reviewer: many letters route
+            resubmittals to an intake desk or portal, and the permit number in
+            the RE line is what matches the response to the review. */}
+        <Text style={styles.block}>{project.ahjName}</Text>
 
         <View style={styles.block}>
           <Text>
@@ -139,7 +138,7 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
         </View>
 
         <Text style={styles.block}>
-          Dear {reviewer},{"\n\n"}
+          To Whom It May Concern,{"\n\n"}
           Please find below our responses to the plan review comments
           {letter.letterDate
             ? ` dated ${letter.letterDate.toLocaleDateString("en-US", { dateStyle: "long", timeZone: "UTC" })}`

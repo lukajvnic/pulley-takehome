@@ -4,6 +4,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import type { CommentType } from "@prisma/client";
 import { clearPendingSave, trackPendingSave } from "@/lib/pending-saves";
 import { useDismiss } from "@/lib/use-dismiss";
+import { displayNumber } from "@/lib/format";
 import { FOCUS_RING, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/ledger-styles";
 import { CommentEditor, type CommentFields } from "@/components/CommentEditor";
 
@@ -92,9 +93,6 @@ function shortName(name: string) {
   const parts = name.split(/\s+/);
   return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
 }
-
-/** "4" → "004". Labels like "A-1" or "TE 1" stay as printed. */
-const displayNumber = (number: string) => (/^\d+$/.test(number) ? number.padStart(3, "0") : number);
 
 /** Splits text around the cited references; odd entries are the references. */
 function splitRefs(text: string, refs: string[]) {
@@ -273,6 +271,7 @@ export function CommentRow({
   attachedIds,
   onToggleFile,
   onUploadFile,
+  letterHref,
   assignees,
   members,
   onToggleAssignee,
@@ -296,6 +295,8 @@ export function CommentRow({
   attachedIds: string[];
   onToggleFile: (fileId: string) => void;
   onUploadFile: (file: File) => Promise<boolean>;
+  /** The letter viewer, with this comment highlighted. */
+  letterHref: string;
   assignees: Member[];
   members: Member[];
   onToggleAssignee: (userId: string) => void;
@@ -449,7 +450,20 @@ export function CommentRow({
         >
           <div className="flex min-w-0 flex-col gap-5.5">
             <section className="flex flex-col gap-2">
-              <div className={LABEL}>AHJ COMMENT</div>
+              <div className="flex items-baseline justify-between gap-3">
+                <div className={LABEL}>AHJ COMMENT</div>
+                <a
+                  href={letterHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex items-center gap-0.5 rounded-xs text-small text-accent hover:text-accent-hover ${FOCUS_RING}`}
+                >
+                  View in letter
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
+                </a>
+              </div>
               {editingComment ? (
                 <CommentEditor
                   initial={{
