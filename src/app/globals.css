@@ -1,1 +1,71 @@
 @import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+/* Comment ledger tokens, from design/HANDOFF.md. */
+@theme {
+  --color-ink: #17191c;
+  --color-ink-body: #24272d;
+  --color-ink-secondary: #4a4f57;
+  --color-ink-muted: #5b606a;
+  --color-ink-placeholder: #7a7f88;
+
+  --color-canvas: #f6f6f3;
+  --color-line: #e2e2dd;
+  --color-line-strong: #d6d6d0;
+  --color-line-header: #e7e7e2;
+  --color-line-row: #edede8;
+  --color-line-panel: #ecece7;
+  --color-row-hover: #fafaf7;
+  --color-row-open: #fcfcfa;
+  --color-option-hover: #f3f3ef;
+
+  --color-accent: #1f4fd1;
+  --color-accent-hover: #163a9e;
+  --color-chip: #eef1fb;
+  --color-chip-ink: #1e3a8a;
+  --color-saved: #2f7a45;
+
+  --color-status-open: #fbebdd;
+  --color-status-open-ink: #8a3a0b;
+  --color-status-draft: #e8ecfb;
+  --color-status-draft-ink: #2e3a8c;
+  --color-status-completed: #e3f2e6;
+  --color-status-completed-ink: #1e5b2e;
+
+  --color-discipline-structural: #c2410c;
+  --color-discipline-fire: #b91c1c;
+  --color-discipline-electrical: #a16207;
+  --color-discipline-mechanical: #0f766e;
+  --color-discipline-plumbing: #1d4ed8;
+  --color-discipline-accessibility: #7c3aed;
+  --color-discipline-zoning: #4d7c0f;
+
+  --color-avatar-1: #f3d6c1;
+  --color-avatar-1-ink: #6b2f0a;
+  --color-avatar-2: #d3e2f6;
+  --color-avatar-2-ink: #173a73;
+  --color-avatar-3: #d6ecd2;
+  --color-avatar-3-ink: #22501c;
+  --color-avatar-4: #e6d8f3;
+  --color-avatar-4-ink: #4b1f6e;
+  --color-avatar-5: #f4e4b0;
+  --color-avatar-5-ink: #5c4307;
+
+  --text-micro: 10px;
+  --text-caption: 11px;
+  --text-tiny: 11.5px;
+  --text-meta: 12.5px;
+  --text-small: 13px;
+  --text-body: 14.5px;
+
+  --tracking-caption: 0.06em;
+  --tracking-label: 0.08em;
+
+  --radius-chip: 5px;
+
+  --shadow-popover: 0 14px 36px rgb(23 25 28 / 0.16);
+}

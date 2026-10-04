@@ -7,10 +7,12 @@ export function UploadButton({
   uploadUrl,
   label,
   accept,
+  primary,
 }: {
   uploadUrl: string;
   label: string;
   accept?: string;
+  primary?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -48,7 +50,11 @@ export function UploadButton({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+        className={
+          primary
+            ? "rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            : "rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+        }
       >
         {busy ? "Uploading…" : label}
       </button>

@@ -12,6 +12,7 @@ const INSTRUCTIONS = `You extract review comments from plan review comment lette
 Return every item the jurisdiction lists, in the order it appears:
 - number: the item's label exactly as printed, without trailing punctuation or notes like "(repeat)". Examples: "4", "A-1", "TE 1", "1.03". Use "" if the item has no printed label.
 - discipline: the section heading or review discipline the item is under, e.g. "Structural" or "Drainage Engineering". null if the letter has no sections.
+- title: a short summary of what the item asks for, at most 8 words, starting with a verb where it fits, e.g. "Provide structural calcs for rooftop units". Write it yourself; don't copy the first sentence.
 - text: the full item text, verbatim, without the label. Keep sub-items and list entries on their own lines. Write tables as plain text rows.
 - sheetRefs: sheet numbers of the drawings the item cites, e.g. "A-101", "S-201". Only sheet numbers, not sheet names like "cover sheet" or "site plan". [] if none.
 - codeRefs: codes, ordinances and standards the item cites, e.g. "CBC 1010.1.1", "NFPA 13 (2022) 28.2.4.2". [] if none.
@@ -34,6 +35,7 @@ type ParsedLetter = {
   comments: {
     number: string;
     discipline: string | null;
+    title: string;
     text: string;
     sheetRefs: string[];
     codeRefs: string[];
@@ -55,10 +57,11 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["number", "discipline", "text", "sheetRefs", "codeRefs", "commentType"],
+        required: ["number", "discipline", "title", "text", "sheetRefs", "codeRefs", "commentType"],
         properties: {
           number: { type: "string" },
           discipline: { type: ["string", "null"] },
+          title: { type: "string" },
           text: { type: "string" },
           sheetRefs: { type: "array", items: { type: "string" } },
           codeRefs: { type: "array", items: { type: "string" } },

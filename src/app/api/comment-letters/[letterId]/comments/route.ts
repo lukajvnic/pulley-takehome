@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { findLetter, isProjectMember, readCommentFields } from "@/lib/comments";
+import { areProjectMembers, findLetter, readCommentFields } from "@/lib/comments";
 
 // Adds a comment by hand, e.g. one the parser missed or after a failed parse.
 export async function POST(
@@ -33,16 +33,13 @@ export async function POST(
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
-  const { fields } = result;
+  const { assigneeIds, ...fields } = result.fields;
   if (fields.number === undefined || fields.text === undefined) {
     return NextResponse.json({ error: "number and text are required" }, { status: 400 });
   }
-  if (
-    fields.assigneeId &&
-    !(await isProjectMember(found.approval.permit.projectId, fields.assigneeId))
-  ) {
+  if (assigneeIds && !(await areProjectMembers(found.approval.permit.projectId, assigneeIds))) {
     return NextResponse.json(
-      { error: "Assignee must be a member of the project" },
+      { error: "Assignees must be members of the project" },
       { status: 400 }
     );
   }
@@ -58,7 +55,9 @@ export async function POST(
       text: fields.text,
       letterId,
       position: (last._max.position ?? 0) + 1,
+      ...(assigneeIds ? { assignees: { connect: assigneeIds.map((id) => ({ id })) } } : {}),
     },
+    include: { assignees: true },
   });
 
   return NextResponse.json(comment, { status: 201 });

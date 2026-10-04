@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import { StatusPill } from "@/components/StatusPill";
 import { StageActions } from "@/components/StageActions";
 import { UploadButton } from "@/components/UploadButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { CommentLedger } from "@/components/CommentLedger";
+import type { LedgerComment, LedgerFile, Member } from "@/components/CommentRow";
+import { fileMeta, uploadedFileName } from "@/lib/format";
+import { uploadSize } from "@/lib/uploads";
 
 export const dynamic = "force-dynamic";
 
@@ -133,8 +138,9 @@ function Preparing({ approval }: { approval: ApprovalWithDocs }) {
 
   return (
     <section>
+      <CycleHeader number={1} />
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-lg font-medium">Submission package</h2>
+        <h3 className="text-base font-semibold">To submit</h3>
         <span className="text-sm text-gray-500">
           {ready} of {total} documents ready
         </span>
@@ -167,38 +173,15 @@ function Submitted({ approval }: { approval: ApprovalWithDocs }) {
         )}
       </div>
 
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-medium">What we submitted</h2>
-        <PackageList approval={approval} editable={false} />
+      <div className="mt-10">
+        <ReviewCycles approval={approval} />
       </div>
     </section>
   );
 }
 
 function Comments({ approval }: { approval: ApprovalWithDocs }) {
-  const ahj = approval.permit.project.ahjName;
-  return (
-    <section>
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-        <p className="font-medium text-amber-900">
-          Comments have been received from {ahj}.
-        </p>
-      </div>
-
-      <div className="mt-6">
-        <h2 className="mb-3 text-lg font-medium">Comments</h2>
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-          <p className="text-sm text-gray-700">
-            No comments have been added to Pulley yet.
-          </p>
-          <p className="mt-1 text-sm text-gray-500">
-            The comments from {ahj} need to get in here before the team can respond
-            to them.
-          </p>
-        </div>
-      </div>
-    </section>
-  );
+  return <ReviewCycles approval={approval} />;
 }
 
 function Approved({ approval }: { approval: ApprovalWithDocs }) {
@@ -215,12 +198,307 @@ function Approved({ approval }: { approval: ApprovalWithDocs }) {
         )}
       </div>
 
-      {approval.documents.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-lg font-medium">What we submitted</h2>
-          <PackageList approval={approval} editable={false} />
+      <div className="mt-10">
+        <ReviewCycles approval={approval} />
+      </div>
+    </section>
+  );
+}
+
+const loadLetters = (approvalId: string) =>
+  db.commentLetter.findMany({
+    where: { document: { approvalId } },
+    include: {
+      document: true,
+      comments: {
+        orderBy: { position: "asc" },
+        include: {
+          assignees: { select: { id: true } },
+          attachments: { select: { documentId: true } },
+        },
+      },
+    },
+  });
+
+type Letter = Awaited<ReturnType<typeof loadLetters>>[number];
+
+const loadCycles = (approvalId: string) =>
+  db.reviewCycle.findMany({
+    where: { approvalId },
+    orderBy: { number: "desc" },
+    include: { documents: { include: { document: true } } },
+  });
+
+
+/**
+ * Every trip to the jurisdiction, newest first. Each cycle shows what was
+ * submitted to start it, then the comments that came back (once they have).
+ */
+async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
+  const [cycles, letters, memberships] = await Promise.all([
+    loadCycles(approval.id),
+    loadLetters(approval.id),
+    db.projectMember.findMany({
+      where: { projectId: approval.permit.projectId },
+      include: { user: true },
+      orderBy: { user: { name: "asc" } },
+    }),
+  ]);
+  const letterForCycle = new Map(letters.map((letter) => [letter.round, letter]));
+
+  // The project team, who comments can be assigned to.
+  const members = memberships.map(({ user }) => ({ id: user.id, name: user.name, role: user.role }));
+
+  // Uploaded package files, which responses can reference.
+  const files = await Promise.all(
+    approval.documents
+      .filter((d) => d.submittal?.status === "uploaded" && d.filePath)
+      .map(async (d) => ({
+        id: d.id,
+        name: d.name,
+        meta: fileMeta(d.filePath!, await uploadSize(d.filePath!)),
+      }))
+  );
+
+  // While the team answers comments, the next submission is being put together:
+  // the response letter, plus the files attached to the comments that haven't
+  // gone out yet. Submitting sends exactly these (see startReviewCycle).
+  const preparing = approval.status === "comments";
+  const latestNumber = cycles[0]?.number ?? 0;
+  const attached = new Set(
+    letterForCycle
+      .get(latestNumber)
+      ?.comments.flatMap((c) => c.attachments.map((a) => a.documentId))
+  );
+  const pending = approval.documents.filter(
+    (d) => d.submittal?.status === "uploaded" && !d.submittal.cycleId && attached.has(d.id)
+  );
+
+  return (
+    <div className="flex flex-col text-ink">
+      {preparing && (
+        <section>
+          <CycleHeader number={latestNumber + 1} />
+          <Submission
+            heading="To submit"
+            documents={pending}
+            answered={letterForCycle.get(latestNumber)}
+            empty="No files attached yet."
+          />
+        </section>
+      )}
+
+      {cycles.map((cycle, i) => {
+        const letter = letterForCycle.get(cycle.number);
+        const latest = i === 0;
+        return (
+          <section
+            key={cycle.id}
+            className={i > 0 || preparing ? "mt-12 border-t border-line pt-10" : ""}
+          >
+            <CycleHeader number={cycle.number} submittedAt={cycle.submittedAt} />
+
+            <div className="flex flex-col gap-10">
+              <Submission
+                heading="What we submitted"
+                documents={cycle.documents.map(({ document }) => document)}
+                answered={letterForCycle.get(cycle.number - 1)}
+                empty="No files were submitted."
+              />
+              {letter ? (
+                <LetterComments
+                  letter={letter}
+                  approvalId={approval.id}
+                  editable={latest && approval.status === "comments"}
+                  files={files}
+                  members={members}
+                />
+              ) : (
+                latest &&
+                approval.status === "submitted" && (
+                  <section>
+                    <h3 className="text-base font-semibold">Plan review comments</h3>
+                    <p className="mt-2 text-sm text-ink-muted">
+                      Waiting on comments from {approval.permit.project.ahjName}.
+                    </p>
+                  </section>
+                )
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A comment letter and the team's responses to it. */
+function LetterComments({
+  letter,
+  approvalId,
+  editable,
+  files,
+  members,
+}: {
+  letter: Letter;
+  approvalId: string;
+  editable: boolean;
+  files: LedgerFile[];
+  members: Member[];
+}) {
+  const letterUrl = `/api/files/${letter.document.filePath}`;
+  const letterLink = (
+    <a
+      href={letterUrl}
+      target="_blank"
+      className="text-accent hover:text-accent-hover"
+    >
+      {letter.document.name}
+    </a>
+  );
+
+  const notice =
+    letter.parseStatus === "processing" ? (
+      <>Reading the comments in {letterLink}. This takes a few seconds.</>
+    ) : letter.parseStatus === "failed" ? (
+      <>Couldn&apos;t read the comments in {letterLink}.</>
+    ) : letter.comments.length === 0 ? (
+      <>No comments were found in {letterLink}.</>
+    ) : undefined;
+
+  const comments: LedgerComment[] = letter.comments.map((c) => ({
+    id: c.id,
+    number: c.number,
+    title: c.title ?? c.text,
+    discipline: c.discipline,
+    text: c.text,
+    sheetRefs: c.sheetRefs,
+    codeRefs: c.codeRefs,
+    commentType: c.commentType,
+    response: c.response ?? "",
+    completed: c.completed,
+    assigneeIds: c.assignees.map((a) => a.id),
+    attachmentIds: c.attachments.map((a) => a.documentId),
+  }));
+
+  return (
+    <>
+      {letter.parseStatus === "processing" && <AutoRefresh />}
+      <CommentLedger
+        // Remount when parsing finishes so the rows start from the new data.
+        key={`${letter.documentId}-${letter.parseStatus}`}
+        approvalId={approvalId}
+        editable={editable}
+        comments={comments}
+        files={files}
+        letterUrl={letterUrl}
+        members={members}
+        notice={notice}
+      />
+    </>
+  );
+}
+
+/** "Review cycle N", with when it went out or that it hasn't yet. */
+function CycleHeader({ number, submittedAt }: { number: number; submittedAt?: Date }) {
+  return (
+    <header className="mb-6 flex items-baseline justify-between gap-4 text-ink">
+      <h2 className="text-xl font-semibold">Review cycle {number}</h2>
+      <span className="text-sm text-ink-muted">
+        {submittedAt ? `Submitted ${longDate(submittedAt)}` : "Not submitted yet"}
+      </span>
+    </header>
+  );
+}
+
+/**
+ * The files in a submission. From the second cycle on, that's the response
+ * letter to the previous cycle's comments, plus supplementary files.
+ */
+async function Submission({
+  heading,
+  documents,
+  answered,
+  empty,
+}: {
+  heading: string;
+  documents: { id: string; name: string; filePath: string | null }[];
+  answered?: Letter;
+  empty: string;
+}) {
+  const files = await Promise.all(
+    documents
+      .filter((document) => document.filePath)
+      .map(async (document) => ({
+        id: document.id,
+        name: document.name,
+        href: `/api/files/${document.filePath}`,
+        meta: `${fileMeta(document.filePath!, await uploadSize(document.filePath!))} · ${uploadedFileName(document.filePath!)}`,
+      }))
+  );
+
+  return (
+    <section>
+      <h3 className="mb-3 text-base font-semibold">{heading}</h3>
+
+      {/* Generating the response letter isn't built yet, so its row has no file. */}
+      {answered && (
+        <FileList
+          files={[
+            {
+              id: `response-${answered.documentId}`,
+              name: `Response to review cycle ${answered.round} comments`,
+              meta: `PDF · not generated yet · response-to-review-cycle-${answered.round}.pdf`,
+            },
+          ]}
+        />
+      )}
+
+      {answered && (
+        <div className="mt-5 mb-2 font-mono text-caption tracking-label text-ink-muted">
+          SUPPLEMENTARY FILES
         </div>
       )}
+      {files.length > 0 ? (
+        <FileList files={files} />
+      ) : (
+        <p className="text-sm text-ink-muted">{empty}</p>
+      )}
     </section>
+  );
+}
+
+/** Files as one bordered list. Files without an `href` show a disabled View. */
+function FileList({
+  files,
+}: {
+  files: { id: string; name: string; meta: string; href?: string }[];
+}) {
+  return (
+    <ul className="divide-y divide-line-row rounded-lg border border-line bg-white">
+      {files.map((file) => (
+        <li key={file.id} className="flex items-center gap-3 px-4 py-3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" className="flex-none text-ink-secondary" aria-hidden="true">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5" />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm">{file.name}</div>
+            <div className="text-tiny text-ink-muted">{file.meta}</div>
+          </div>
+          {file.href ? (
+            <a
+              href={file.href}
+              target="_blank"
+              className="flex-none text-small text-accent hover:text-accent-hover"
+            >
+              View
+            </a>
+          ) : (
+            <span className="flex-none text-small text-ink-placeholder">View</span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
+import { startReviewCycle } from "../src/lib/review-cycles";
 
 const db = new PrismaClient();
 
@@ -63,6 +64,7 @@ const needed = (name: string) => ({
 async function main() {
   // Reset everything so the seed is idempotent.
   await db.document.deleteMany();
+  await db.reviewCycle.deleteMany();
   await db.approval.deleteMany();
   await db.permit.deleteMany();
   await db.projectMember.deleteMany();
@@ -252,6 +254,15 @@ async function main() {
       },
     },
   });
+
+  // Approvals that already went out start with their first review cycle,
+  // holding the package that was submitted.
+  const sent = await db.approval.findMany({
+    where: { status: { in: ["submitted", "approved"] } },
+  });
+  for (const approval of sent) {
+    await startReviewCycle(db, approval.id, approval.submittedAt ?? june);
+  }
 
   console.log("Seed complete.");
 }
