@@ -386,7 +386,7 @@ function LetterComments({
   const comments: LedgerComment[] = letter.comments.map((c) => ({
     id: c.id,
     number: c.number,
-    title: c.title ?? c.text,
+    title: c.title,
     discipline: c.discipline,
     text: c.text,
     sheetRefs: c.sheetRefs,
@@ -405,11 +405,15 @@ function LetterComments({
         // Remount when parsing finishes so the rows start from the new data.
         key={`${letter.documentId}-${letter.parseStatus}`}
         approvalId={approvalId}
+        letterId={letter.documentId}
         editable={editable}
         comments={comments}
         files={files}
         letterUrl={letterUrl}
         members={members}
+        // Comments can be added by hand once parsing has finished, including
+        // when it failed or found nothing.
+        canAdd={editable && letter.parseStatus !== "processing"}
         notice={notice}
       />
     </>

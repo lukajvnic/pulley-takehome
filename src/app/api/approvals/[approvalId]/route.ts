@@ -40,6 +40,20 @@ export async function PATCH(
         orderBy: { round: "desc" },
       })
     : null;
+
+  // Corrections not marked completed would go out unanswered. The client asks
+  // the team to confirm first, then resends with `confirmUnanswered`.
+  if (letter && body?.confirmUnanswered !== true) {
+    const unanswered = await db.comment.count({
+      where: { letterId: letter.documentId, commentType: "correction", completed: false },
+    });
+    if (unanswered > 0) {
+      return NextResponse.json(
+        { error: "Some corrections haven't been answered", unanswered },
+        { status: 409 }
+      );
+    }
+  }
   const response = letter
     ? await renderResponseLetter(letter.documentId, { draft: false, date: now })
     : null;

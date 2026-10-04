@@ -51,9 +51,9 @@
 
 ## todo
 
-1) resubmit warning if there are unanswered corrections
-2) add support for editing, adding, and deleting comments.
-3) make architecture diagram
+1) ~~resubmit warning if there are unanswered corrections~~ done
+2) ~~add support for editing, adding, and deleting comments.~~ done
+3) ~~make architecture diagram~~ done: https://claude.ai/artifact/DkDvSscUdeqKsqCE2L4wF7
 4) update readme
 5) ensure letter is addressed to the right people (change to whom it may concern)
 6) potential deployment?
