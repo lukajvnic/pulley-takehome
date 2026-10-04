@@ -95,12 +95,13 @@ model Approval {
   approvedAt  DateTime?
   permit      Permit         @relation(fields: [permitId], references: [id])
   documents   Document[]
-  cycles      ReviewCycle[]
+  submissions Submission[]
 }
 
-// One trip to the jurisdiction: starts when the team submits, and holds the
-// files that went out. The comment letter that comes back has the same round.
-model ReviewCycle {
+// One package sent to the jurisdiction, holding the files that went out.
+// Submission 1 is the initial submittal; the jurisdiction's review N looks at
+// submission N, and its comment letter (round N) is answered by submission N + 1.
+model Submission {
   id          String              @id @default(cuid())
   approvalId  String
   number      Int
@@ -128,16 +129,16 @@ model Document {
 // A file the team submits to the jurisdiction (the package checklist, and files
 // referenced from comment responses).
 model SubmittalDocument {
-  documentId String         @id
-  kind       DocumentKind   @default(required_upload)
-  status     DocumentStatus @default(needed)
-  cycleId    String? // the review cycle it was submitted in; null until submitted
-  document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  cycle      ReviewCycle?   @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  comments   Comment[]
+  documentId   String         @id
+  kind         DocumentKind   @default(required_upload)
+  status       DocumentStatus @default(needed)
+  submissionId String? // the submission it went out with; null until submitted
+  document     Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  submission   Submission?    @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  comments     Comment[]
 }
 
-// A comment letter received from the jurisdiction, one per review round.
+// A comment letter from the jurisdiction's review N (its `round`), on submission N.
 model CommentLetter {
   documentId   String      @id
   round        Int

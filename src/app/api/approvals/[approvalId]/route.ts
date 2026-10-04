@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ApprovalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { renderResponseLetter } from "@/lib/response-letter";
-import { startReviewCycle } from "@/lib/review-cycles";
+import { recordSubmission } from "@/lib/submissions";
 import { saveGeneratedPdf } from "@/lib/generated-pdfs";
 
 // Simplistic status changes: any status can move to any other status.
@@ -25,8 +25,8 @@ export async function PATCH(
     );
   }
 
-  // Every move into submitted is a new trip to the jurisdiction: it starts a
-  // review cycle, and submittedAt tracks the latest one.
+  // Every move into submitted sends a package to the jurisdiction: it records a
+  // submission, and submittedAt tracks the latest one.
   const submitting = status === "submitted" && approval.status !== "submitted";
   const responding = submitting && approval.status === "comments";
   const now = new Date();
@@ -50,17 +50,23 @@ export async function PATCH(
   const updated = await db.$transaction(async (tx) => {
     if (submitting) {
       // Moving on from comments means sending the response, with its attachments.
-      const cycle = await startReviewCycle(tx, approval.id, now, { attachedOnly: responding });
+      const submission = await recordSubmission(tx, approval.id, now, {
+        attachedOnly: responding,
+      });
       if (response && responsePath) {
         await tx.document.create({
           data: {
             approvalId: approval.id,
             type: "submittal",
-            name: `Response to review cycle ${response.round} comments`,
+            name: "Response letter",
             filePath: responsePath,
             uploadedAt: now,
             submittal: {
-              create: { kind: "response_letter", status: "uploaded", cycleId: cycle.id },
+              create: {
+                kind: "response_letter",
+                status: "uploaded",
+                submissionId: submission.id,
+              },
             },
           },
         });

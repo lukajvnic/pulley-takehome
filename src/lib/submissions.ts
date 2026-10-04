@@ -1,33 +1,32 @@
 import type { Prisma } from "@prisma/client";
 
 /**
- * Records a submission to the jurisdiction: a new review cycle, holding the
- * files that haven't gone out in an earlier cycle. The first submission sends
- * the whole uploaded package; a response to comments sends only the files
- * attached to those comments.
+ * Records a package sent to the jurisdiction, holding the files that haven't
+ * gone out before. The initial submittal sends the whole uploaded package; a
+ * resubmittal answering comments sends only the files attached to them.
  */
-export async function startReviewCycle(
+export async function recordSubmission(
   client: Prisma.TransactionClient,
   approvalId: string,
   submittedAt: Date,
   { attachedOnly = false }: { attachedOnly?: boolean } = {}
 ) {
-  const latest = await client.reviewCycle.findFirst({
+  const latest = await client.submission.findFirst({
     where: { approvalId },
     orderBy: { number: "desc" },
     select: { number: true },
   });
-  const cycle = await client.reviewCycle.create({
+  const submission = await client.submission.create({
     data: { approvalId, number: (latest?.number ?? 0) + 1, submittedAt },
   });
   await client.submittalDocument.updateMany({
     where: {
-      cycleId: null,
+      submissionId: null,
       status: "uploaded",
       document: { approvalId },
       ...(attachedOnly ? { comments: { some: {} } } : {}),
     },
-    data: { cycleId: cycle.id },
+    data: { submissionId: submission.id },
   });
-  return cycle;
+  return submission;
 }

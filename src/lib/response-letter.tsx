@@ -214,5 +214,5 @@ export async function renderResponseLetter(
 ) {
   const letter = await loadLetter(letterId);
   const pdf = await renderToBuffer(<ResponseLetter letter={letter} date={date} draft={draft} />);
-  return { pdf, fileName: responseLetterFileName(letter.round), round: letter.round };
+  return { pdf, fileName: responseLetterFileName(letter.round) };
 }
