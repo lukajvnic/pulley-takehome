@@ -2,13 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { StatusPill } from "@/components/StatusPill";
+import type { ReactNode } from "react";
+import type { DocumentKind } from "@prisma/client";
 import { StageActions } from "@/components/StageActions";
+import { DownloadButton } from "@/components/DownloadButton";
 import { UploadButton } from "@/components/UploadButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { CommentLedger } from "@/components/CommentLedger";
 import type { LedgerComment, LedgerFile, Member } from "@/components/CommentRow";
-import { fileMeta, uploadedFileName } from "@/lib/format";
+import { fileMeta, responseLetterFileName, uploadedFileName } from "@/lib/format";
 import { uploadSize } from "@/lib/uploads";
+import { generatedPdfSize } from "@/lib/generated-pdfs";
 
 export const dynamic = "force-dynamic";
 
@@ -252,7 +256,12 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
   // Uploaded package files, which responses can reference.
   const files = await Promise.all(
     approval.documents
-      .filter((d) => d.submittal?.status === "uploaded" && d.filePath)
+      .filter(
+        (d) =>
+          d.submittal?.status === "uploaded" &&
+          d.submittal.kind !== "response_letter" &&
+          d.filePath
+      )
       .map(async (d) => ({
         id: d.id,
         name: d.name,
@@ -281,7 +290,7 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
           <CycleHeader number={latestNumber + 1} />
           <Submission
             heading="To submit"
-            documents={pending}
+            documents={pending.map((d) => ({ ...d, kind: d.submittal!.kind }))}
             answered={letterForCycle.get(latestNumber)}
             empty="No files attached yet."
           />
@@ -301,7 +310,7 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
             <div className="flex flex-col gap-10">
               <Submission
                 heading="What we submitted"
-                documents={cycle.documents.map(({ document }) => document)}
+                documents={cycle.documents.map(({ document, kind }) => ({ ...document, kind }))}
                 answered={letterForCycle.get(cycle.number - 1)}
                 empty="No files were submitted."
               />
@@ -422,45 +431,59 @@ async function Submission({
   empty,
 }: {
   heading: string;
-  documents: { id: string; name: string; filePath: string | null }[];
+  documents: { id: string; name: string; filePath: string | null; kind: DocumentKind }[];
   answered?: Letter;
   empty: string;
 }) {
-  const files = await Promise.all(
-    documents
-      .filter((document) => document.filePath)
-      .map(async (document) => ({
-        id: document.id,
-        name: document.name,
-        href: `/api/files/${document.filePath}`,
-        meta: `${fileMeta(document.filePath!, await uploadSize(document.filePath!))} · ${uploadedFileName(document.filePath!)}`,
-      }))
+  // Response letters are generated, so they live apart from uploads.
+  const describe = async (document: (typeof documents)[number]) => {
+    const generated = document.kind === "response_letter";
+    const size = generated
+      ? await generatedPdfSize(document.filePath!)
+      : await uploadSize(document.filePath!);
+    return {
+      id: document.id,
+      name: document.name,
+      href: `${generated ? "/api/generated-pdfs" : "/api/files"}/${document.filePath}`,
+      meta: `${fileMeta(document.filePath!, size)} · ${uploadedFileName(document.filePath!)}`,
+    };
+  };
+  const withFiles = documents.filter((document) => document.filePath);
+  const stored = withFiles.find((document) => document.kind === "response_letter");
+  const supplementary = await Promise.all(
+    withFiles.filter((document) => document !== stored).map(describe)
   );
+
+  // The response letter: the copy stored when it went out, or else one
+  // generated from the saved responses on download (a draft while they can
+  // still change).
+  const responseFile = stored
+    ? await describe(stored)
+    : answered && {
+        id: `response-${answered.documentId}`,
+        name: `Response to review cycle ${answered.round} comments`,
+        meta: `PDF · generated on download · ${responseLetterFileName(answered.round)}`,
+        action: (
+          <DownloadButton
+            href={`/api/comment-letters/${answered.documentId}/response-letter`}
+            fileName={responseLetterFileName(answered.round)}
+          />
+        ),
+      };
 
   return (
     <section>
       <h3 className="mb-3 text-base font-semibold">{heading}</h3>
 
-      {/* Generating the response letter isn't built yet, so its row has no file. */}
-      {answered && (
-        <FileList
-          files={[
-            {
-              id: `response-${answered.documentId}`,
-              name: `Response to review cycle ${answered.round} comments`,
-              meta: `PDF · not generated yet · response-to-review-cycle-${answered.round}.pdf`,
-            },
-          ]}
-        />
-      )}
+      {responseFile && <FileList files={[responseFile]} />}
 
       {answered && (
         <div className="mt-5 mb-2 font-mono text-caption tracking-label text-ink-muted">
           SUPPLEMENTARY FILES
         </div>
       )}
-      {files.length > 0 ? (
-        <FileList files={files} />
+      {supplementary.length > 0 ? (
+        <FileList files={supplementary} />
       ) : (
         <p className="text-sm text-ink-muted">{empty}</p>
       )}
@@ -468,11 +491,11 @@ async function Submission({
   );
 }
 
-/** Files as one bordered list. Files without an `href` show a disabled View. */
+/** Files as one bordered list, each with a View link or its own `action`. */
 function FileList({
   files,
 }: {
-  files: { id: string; name: string; meta: string; href?: string }[];
+  files: { id: string; name: string; meta: string; href?: string; action?: ReactNode }[];
 }) {
   return (
     <ul className="divide-y divide-line-row rounded-lg border border-line bg-white">
@@ -486,17 +509,16 @@ function FileList({
             <div className="truncate text-sm">{file.name}</div>
             <div className="text-tiny text-ink-muted">{file.meta}</div>
           </div>
-          {file.href ? (
-            <a
-              href={file.href}
-              target="_blank"
-              className="flex-none text-small text-accent hover:text-accent-hover"
-            >
-              View
-            </a>
-          ) : (
-            <span className="flex-none text-small text-ink-placeholder">View</span>
-          )}
+          {file.action ??
+            (file.href && (
+              <a
+                href={file.href}
+                target="_blank"
+                className="flex-none text-small text-accent hover:text-accent-hover"
+              >
+                View
+              </a>
+            ))}
         </li>
       ))}
     </ul>

@@ -1,10 +1,10 @@
+import { GENERATED_PDFS_DIR } from "@/lib/generated-pdfs";
 import { serveFile } from "@/lib/serve-file";
-import { UPLOADS_DIR } from "@/lib/uploads";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path: segments } = await params;
-  return serveFile(UPLOADS_DIR, segments);
+  return serveFile(GENERATED_PDFS_DIR, segments);
 }

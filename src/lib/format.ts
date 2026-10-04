@@ -16,3 +16,6 @@ export function fileMeta(name: string, bytes: number) {
   const ext = name.includes(".") ? name.split(".").pop()!.toUpperCase() : "FILE";
   return `${ext} · ${formatBytes(bytes)}`;
 }
+
+/** File name for the response to a review cycle's comments. */
+export const responseLetterFileName = (round: number) => `response-to-review-cycle-${round}.pdf`;

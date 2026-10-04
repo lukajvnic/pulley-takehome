@@ -23,6 +23,7 @@ enum ApprovalStatus {
 
 enum DocumentKind {
   required_upload
+  response_letter // generated when a response is submitted
 }
 
 enum DocumentStatus {

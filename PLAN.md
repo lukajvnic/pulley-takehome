@@ -47,6 +47,7 @@
  - using gpt-6 luna
  - review cycles
  - what we submitted split by review cycle, paired with comments
+ - pdf generated on backend, saved on submit
 
 ## todo
 
@@ -56,6 +57,7 @@
 - [ ] pdf viewer jump to comment
 - [ ] add filters on comments list
 - [ ] list key notes
+- [ ] ensure letter is addressed to the right people
 
 ## Implementation Plan
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { CommentType } from "@prisma/client";
+import { clearPendingSave, trackPendingSave } from "@/lib/pending-saves";
 
 export type LedgerComment = {
   id: string;
@@ -352,12 +353,15 @@ export function CommentRow({
     saveTimer.current = null;
     const request = ++latestSave.current;
     setSaveState("saving");
-    const res = await fetch(`/api/comments/${comment.id}`, {
+    const saving = fetch(`/api/comments/${comment.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response: value }),
     }).catch(() => null);
+    trackPendingSave(comment.id, () => saving.then(() => {}));
+    const res = await saving;
     if (request !== latestSave.current) return; // a newer save has started
+    clearPendingSave(comment.id);
     setSaveState(!res?.ok ? "error" : value.trim() ? "saved" : "idle");
   }
 
@@ -366,6 +370,11 @@ export function CommentRow({
     setSaveState("saving"); // unsaved from the first keystroke until the server confirms
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(value), 800);
+    // A download can't wait out the debounce, so it saves this value right away.
+    trackPendingSave(comment.id, () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      return save(value);
+    });
   }
 
   function flushResponse() {
