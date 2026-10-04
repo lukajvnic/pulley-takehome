@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ApprovalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { startReviewCycle } from "@/lib/review-cycles";
 
 // Simplistic status changes: any status can move to any other status.
 export async function PATCH(
@@ -22,18 +23,26 @@ export async function PATCH(
     );
   }
 
-  const updated = await db.approval.update({
-    where: { id: approval.id },
-    data: {
-      status,
-      // Reset on every move into submitted, so a resubmittal gets its own date.
-      ...(status === "submitted" && approval.status !== "submitted"
-        ? { submittedAt: new Date() }
-        : {}),
-      ...(status === "approved" && !approval.approvedAt
-        ? { approvedAt: new Date() }
-        : {}),
-    },
+  // Every move into submitted is a new trip to the jurisdiction: it starts a
+  // review cycle, and submittedAt tracks the latest one.
+  const submitting = status === "submitted" && approval.status !== "submitted";
+  const now = new Date();
+
+  const updated = await db.$transaction(async (tx) => {
+    if (submitting) {
+      // Moving on from comments means sending the response, with its attachments.
+      await startReviewCycle(tx, approval.id, now, {
+        attachedOnly: approval.status === "comments",
+      });
+    }
+    return tx.approval.update({
+      where: { id: approval.id },
+      data: {
+        status,
+        ...(submitting ? { submittedAt: now } : {}),
+        ...(status === "approved" && !approval.approvedAt ? { approvedAt: now } : {}),
+      },
+    });
   });
 
   return NextResponse.json(updated);

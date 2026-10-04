@@ -109,21 +109,38 @@ function splitRefs(text: string, refs: string[]) {
   return text.split(new RegExp(`(${escaped.join("|")})`, "g"));
 }
 
-/**
- * Opens the comment letter in a new tab. `#search=` jumps to the reference in
- * viewers that support it (e.g. Firefox); others open the first page.
- */
-function RefLink({ href, code, children }: { href: string; code: string; children: ReactNode }) {
+/** Copies a sheet or code reference, e.g. to paste into a search or the drawings. */
+function RefCopy({ code, children }: { code: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function copy() {
+    await navigator.clipboard.writeText(code).catch(() => {});
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
-    <a
-      href={`${href}#search=${encodeURIComponent(code)}`}
-      target="_blank"
-      rel="noreferrer"
-      className={`-mx-2 flex items-center gap-2.5 rounded-chip px-2 py-1.5 text-ink hover:text-accent ${FOCUS_RING}`}
+    <button
+      type="button"
+      onClick={copy}
+      title={`Copy ${code}`}
+      className={`-mx-2 flex cursor-pointer items-center gap-2.5 rounded-chip px-2 py-1.5 text-left text-ink hover:text-accent ${FOCUS_RING}`}
     >
       {children}
       <span className="font-mono text-meta font-semibold">{code}</span>
-    </a>
+      <span aria-live="polite" className="ml-auto inline-flex items-center gap-1 text-tiny font-normal text-saved">
+        {copied && (
+          <>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+            Copied
+          </>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -285,7 +302,6 @@ export function CommentRow({
   attachedIds,
   onToggleFile,
   onUploadFile,
-  letterUrl,
   assignees,
   members,
   onToggleAssignee,
@@ -307,7 +323,6 @@ export function CommentRow({
   attachedIds: string[];
   onToggleFile: (fileId: string) => void;
   onUploadFile: (file: File) => Promise<boolean>;
-  letterUrl: string;
   assignees: Member[];
   members: Member[];
   onToggleAssignee: (userId: string) => void;
@@ -382,7 +397,8 @@ export function CommentRow({
         open ? "bg-row-open" : "bg-white"
       } ${isLast ? "rounded-b-lg" : ""}`}
     >
-      {/* The toggle stretches over the whole row (after:inset-0); the assignee picker sits above it. */}
+      {/* The toggle stretches over the whole row (after:inset-0). The assignee picker
+          sits above it, since a menu can't go inside a button. */}
       <div
         className={`${ROW_GRID} relative min-h-15 items-center py-3 hover:bg-row-hover ${
           isLast && !open ? "rounded-b-lg" : ""
@@ -393,33 +409,38 @@ export function CommentRow({
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={`${id}-panel`}
-          className={`col-span-3 grid cursor-pointer grid-cols-[20px_44px_minmax(0,1fr)] items-center gap-x-3 text-left after:absolute after:inset-0 ${FOCUS_RING}`}
+          aria-labelledby={`${id}-number ${id}-title`}
+          className={`col-span-2 grid cursor-pointer grid-cols-[20px_44px] items-center gap-x-3 text-left after:absolute after:inset-0 ${FOCUS_RING}`}
         >
           <span className={`inline-flex justify-center transition-transform duration-150 ${open ? "rotate-90" : ""}`}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-muted" aria-hidden="true">
               <path d="M9 6l6 6-6 6" />
             </svg>
           </span>
-          <span className="font-mono text-meta text-ink-muted">{displayNumber(comment.number)}</span>
-          <span className="flex min-w-0 flex-col gap-1 pr-6">
-            <span className="truncate text-body font-semibold">{comment.title}</span>
-            {(comment.discipline || primarySheet) && (
-              <span className="flex min-w-0 items-center gap-1.75 text-caption font-semibold tracking-label text-ink-secondary uppercase">
-                {comment.discipline && (
-                  <>
-                    <span className={`size-2 flex-none rounded-xs ${disciplineColor(comment.discipline)}`} />
-                    <span className="truncate">{comment.discipline}</span>
-                  </>
-                )}
-                {primarySheet && (
-                  <span className="flex-none font-mono font-normal tracking-normal text-ink-muted normal-case">
-                    {comment.discipline ? `· ${primarySheet}` : primarySheet}
-                  </span>
-                )}
-              </span>
-            )}
+          <span id={`${id}-number`} className="font-mono text-meta text-ink-muted">
+            {displayNumber(comment.number)}
           </span>
         </button>
+        <span className="flex min-w-0 flex-col gap-1 pr-6">
+          <span id={`${id}-title`} className="truncate text-body font-semibold">
+            {comment.title}
+          </span>
+          {(comment.discipline || primarySheet) && (
+            <span className="flex min-w-0 items-center gap-1.75 text-caption font-semibold tracking-label text-ink-secondary uppercase">
+              {comment.discipline && (
+                <>
+                  <span className={`size-2 flex-none rounded-xs ${disciplineColor(comment.discipline)}`} />
+                  <span className="truncate">{comment.discipline}</span>
+                </>
+              )}
+              {primarySheet && (
+                <span className="flex-none font-mono font-normal tracking-normal text-ink-muted normal-case">
+                  {comment.discipline ? `· ${primarySheet}` : primarySheet}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
         <AssigneePicker
           assignees={assignees}
           members={members}
@@ -500,12 +521,12 @@ export function CommentRow({
                 <div className="flex flex-col gap-1">
                   <div className="mb-0.5 text-xs font-semibold text-ink-secondary">Drawings</div>
                   {comment.sheetRefs.map((ref) => (
-                    <RefLink key={ref} href={letterUrl} code={ref}>
+                    <RefCopy key={ref} code={ref}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" className="flex-none text-ink-secondary" aria-hidden="true">
                         <rect x="3" y="4" width="18" height="16" rx="1.5" />
                         <path d="M3 15h18M14 15v5" />
                       </svg>
-                    </RefLink>
+                    </RefCopy>
                   ))}
                 </div>
               )}
@@ -513,12 +534,12 @@ export function CommentRow({
                 <div className="flex flex-col gap-1">
                   <div className="mb-0.5 text-xs font-semibold text-ink-secondary">Codes &amp; standards</div>
                   {comment.codeRefs.map((ref) => (
-                    <RefLink key={ref} href={letterUrl} code={ref}>
+                    <RefCopy key={ref} code={ref}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" className="flex-none text-ink-secondary" aria-hidden="true">
                         <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
                         <path d="M5 17a3 3 0 0 1 3-3h11" />
                       </svg>
-                    </RefLink>
+                    </RefCopy>
                   ))}
                 </div>
               )}

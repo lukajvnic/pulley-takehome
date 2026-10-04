@@ -14,16 +14,15 @@ type Action = {
 };
 
 // Forward moves only. The API itself allows any status to any status.
+// Submitting and receiving comments repeat, one review cycle per submission,
+// until the jurisdiction approves.
 const actions: Record<ApprovalStatus, Action[]> = {
   preparing: [{ label: "Submit to jurisdiction", next: "submitted", primary: true }],
   submitted: [
     { label: "Comments received", next: "comments", primary: true, uploadLetter: true },
     { label: "Mark approved", next: "approved" },
   ],
-  comments: [
-    { label: "Submit response", next: "submitted", primary: true },
-    { label: "Mark approved", next: "approved" },
-  ],
+  comments: [{ label: "Submit to jurisdiction", next: "submitted", primary: true }],
   approved: [],
 };
 

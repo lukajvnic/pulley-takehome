@@ -33,9 +33,14 @@ export async function POST(
 
   const filePath = await saveUpload(file, `letter-${approval.id}`);
   const letter = await db.$transaction(async (tx) => {
-    const previous = await tx.commentLetter.count({
-      where: { document: { approvalId: approval.id } },
+    // The letter answers the latest submission, so it takes that cycle's number.
+    const cycle = await tx.reviewCycle.findFirst({
+      where: { approvalId: approval.id },
+      orderBy: { number: "desc" },
     });
+    const round =
+      cycle?.number ??
+      (await tx.commentLetter.count({ where: { document: { approvalId: approval.id } } })) + 1;
     const document = await tx.document.create({
       data: {
         approvalId: approval.id,
@@ -43,7 +48,7 @@ export async function POST(
         name: file.name,
         filePath,
         uploadedAt: new Date(),
-        commentLetter: { create: { round: previous + 1 } },
+        commentLetter: { create: { round } },
       },
       include: { commentLetter: true },
     });

@@ -94,6 +94,20 @@ model Approval {
   approvedAt  DateTime?
   permit      Permit         @relation(fields: [permitId], references: [id])
   documents   Document[]
+  cycles      ReviewCycle[]
+}
+
+// One trip to the jurisdiction: starts when the team submits, and holds the
+// files that went out. The comment letter that comes back has the same round.
+model ReviewCycle {
+  id          String              @id @default(cuid())
+  approvalId  String
+  number      Int
+  submittedAt DateTime
+  approval    Approval            @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  documents   SubmittalDocument[]
+
+  @@unique([approvalId, number])
 }
 
 // Base table for every file attached to an approval. `type` says which subtype
@@ -116,7 +130,9 @@ model SubmittalDocument {
   documentId String         @id
   kind       DocumentKind   @default(required_upload)
   status     DocumentStatus @default(needed)
+  cycleId    String? // the review cycle it was submitted in; null until submitted
   document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  cycle      ReviewCycle?   @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   comments   Comment[]
 }
 
