@@ -14,6 +14,7 @@ Return every item the jurisdiction lists, in the order it appears:
 - discipline: the section heading or review discipline the item is under, e.g. "Structural" or "Drainage Engineering". null if the letter has no sections.
 - title: a short summary of what the item asks for, at most 8 words, starting with a verb where it fits, e.g. "Provide structural calcs for rooftop units". Write it yourself; don't copy the first sentence.
 - text: the full item text, verbatim, without the label. Keep sub-items and list entries on their own lines. Write tables as plain text rows.
+- page: the page number, starting at 1, where the item begins.
 - sheetRefs: sheet numbers of the drawings the item cites, e.g. "A-101", "S-201". Only sheet numbers, not sheet names like "cover sheet" or "site plan". [] if none.
 - codeRefs: codes, ordinances and standards the item cites, e.g. "CBC 1010.1.1", "NFPA 13 (2022) 28.2.4.2". [] if none.
 - commentType:
@@ -36,6 +37,7 @@ type ParsedLetter = {
     number: string;
     discipline: string | null;
     title: string;
+    page: number;
     text: string;
     sheetRefs: string[];
     codeRefs: string[];
@@ -57,11 +59,21 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["number", "discipline", "title", "text", "sheetRefs", "codeRefs", "commentType"],
+        required: [
+          "number",
+          "discipline",
+          "title",
+          "page",
+          "text",
+          "sheetRefs",
+          "codeRefs",
+          "commentType",
+        ],
         properties: {
           number: { type: "string" },
           discipline: { type: ["string", "null"] },
           title: { type: "string" },
+          page: { type: "integer" },
           text: { type: "string" },
           sheetRefs: { type: "array", items: { type: "string" } },
           codeRefs: { type: "array", items: { type: "string" } },

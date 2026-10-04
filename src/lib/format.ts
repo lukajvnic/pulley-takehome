@@ -16,3 +16,11 @@ export function fileMeta(name: string, bytes: number) {
   const ext = name.includes(".") ? name.split(".").pop()!.toUpperCase() : "FILE";
   return `${ext} · ${formatBytes(bytes)}`;
 }
+
+/** File name for the response to the comments from review cycle `round`. */
+export const responseLetterFileName = (round: number) =>
+  `response-letter-review-cycle-${round}.pdf`;
+
+/** "4" → "004", as the ledger shows comment numbers. Labels like "A-1" or "TE 1" stay as printed. */
+export const displayNumber = (number: string) =>
+  /^\d+$/.test(number) ? number.padStart(3, "0") : number;

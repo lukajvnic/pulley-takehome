@@ -2,13 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { StatusPill } from "@/components/StatusPill";
+import type { ReactNode } from "react";
+import type { DocumentKind } from "@prisma/client";
 import { StageActions } from "@/components/StageActions";
+import { DownloadButton } from "@/components/DownloadButton";
 import { UploadButton } from "@/components/UploadButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { CommentLedger } from "@/components/CommentLedger";
 import type { LedgerComment, LedgerFile, Member } from "@/components/CommentRow";
-import { fileMeta, uploadedFileName } from "@/lib/format";
+import { fileMeta, responseLetterFileName, uploadedFileName } from "@/lib/format";
 import { uploadSize } from "@/lib/uploads";
+import { generatedPdfSize } from "@/lib/generated-pdfs";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +142,7 @@ function Preparing({ approval }: { approval: ApprovalWithDocs }) {
 
   return (
     <section>
-      <CycleHeader number={1} />
+      <SectionHeader title="Initial submittal" />
       <div className="mb-3 flex items-baseline justify-between">
         <h3 className="text-base font-semibold">To submit</h3>
         <span className="text-sm text-gray-500">
@@ -222,21 +226,22 @@ const loadLetters = (approvalId: string) =>
 
 type Letter = Awaited<ReturnType<typeof loadLetters>>[number];
 
-const loadCycles = (approvalId: string) =>
-  db.reviewCycle.findMany({
+const loadSubmissions = (approvalId: string) =>
+  db.submission.findMany({
     where: { approvalId },
     orderBy: { number: "desc" },
     include: { documents: { include: { document: true } } },
   });
 
-
 /**
- * Every trip to the jurisdiction, newest first. Each cycle shows what was
- * submitted to start it, then the comments that came back (once they have).
+ * The approval's history with the jurisdiction, newest first. It starts with
+ * the initial submittal; review cycle N is then the jurisdiction's Nth set of
+ * comments together with the resubmittal answering them (submission N + 1).
+ * Cycles are numbered the way the jurisdiction's letters number their reviews.
  */
 async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
-  const [cycles, letters, memberships] = await Promise.all([
-    loadCycles(approval.id),
+  const [submissions, letters, memberships] = await Promise.all([
+    loadSubmissions(approval.id),
     loadLetters(approval.id),
     db.projectMember.findMany({
       where: { projectId: approval.permit.projectId },
@@ -244,7 +249,7 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
       orderBy: { user: { name: "asc" } },
     }),
   ]);
-  const letterForCycle = new Map(letters.map((letter) => [letter.round, letter]));
+  const letterForRound = new Map(letters.map((letter) => [letter.round, letter]));
 
   // The project team, who comments can be assigned to.
   const members = memberships.map(({ user }) => ({ id: user.id, name: user.name, role: user.role }));
@@ -252,7 +257,12 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
   // Uploaded package files, which responses can reference.
   const files = await Promise.all(
     approval.documents
-      .filter((d) => d.submittal?.status === "uploaded" && d.filePath)
+      .filter(
+        (d) =>
+          d.submittal?.status === "uploaded" &&
+          d.submittal.kind !== "response_letter" &&
+          d.filePath
+      )
       .map(async (d) => ({
         id: d.id,
         name: d.name,
@@ -260,69 +270,76 @@ async function ReviewCycles({ approval }: { approval: ApprovalWithDocs }) {
       }))
   );
 
-  // While the team answers comments, the next submission is being put together:
-  // the response letter, plus the files attached to the comments that haven't
-  // gone out yet. Submitting sends exactly these (see startReviewCycle).
+  // While the team answers comments, the review cycle they belong to is on top,
+  // not submitted yet: the response letter, the files attached so far, and the
+  // comments. Submitting sends exactly those files (see recordSubmission).
   const preparing = approval.status === "comments";
-  const latestNumber = cycles[0]?.number ?? 0;
+  const latestNumber = submissions[0]?.number ?? 0;
+  const openLetter = preparing ? letterForRound.get(latestNumber) : undefined;
   const attached = new Set(
-    letterForCycle
-      .get(latestNumber)
-      ?.comments.flatMap((c) => c.attachments.map((a) => a.documentId))
+    openLetter?.comments.flatMap((c) => c.attachments.map((a) => a.documentId))
   );
   const pending = approval.documents.filter(
-    (d) => d.submittal?.status === "uploaded" && !d.submittal.cycleId && attached.has(d.id)
+    (d) => d.submittal?.status === "uploaded" && !d.submittal.submissionId && attached.has(d.id)
   );
 
   return (
     <div className="flex flex-col text-ink">
       {preparing && (
         <section>
-          <CycleHeader number={latestNumber + 1} />
-          <Submission
-            heading="To submit"
-            documents={pending}
-            answered={letterForCycle.get(latestNumber)}
-            empty="No files attached yet."
-          />
+          <SectionHeader title={`Review cycle ${latestNumber}`} />
+          <div className="flex flex-col gap-10">
+            <SubmittedFiles
+              heading="To submit"
+              documents={pending.map((d) => ({ ...d, kind: d.submittal!.kind }))}
+              answered={openLetter}
+              empty="No files attached yet."
+            />
+            {openLetter && (
+              <LetterComments
+                letter={openLetter}
+                approvalId={approval.id}
+                editable
+                files={files}
+                members={members}
+              />
+            )}
+          </div>
         </section>
       )}
 
-      {cycles.map((cycle, i) => {
-        const letter = letterForCycle.get(cycle.number);
-        const latest = i === 0;
+      {submissions.map((submission, i) => {
+        // Submission N + 1 answers review N's comments; submission 1 answers none.
+        const answered = letterForRound.get(submission.number - 1);
         return (
           <section
-            key={cycle.id}
+            key={submission.id}
             className={i > 0 || preparing ? "mt-12 border-t border-line pt-10" : ""}
           >
-            <CycleHeader number={cycle.number} submittedAt={cycle.submittedAt} />
+            <SectionHeader
+              title={
+                submission.number === 1
+                  ? "Initial submittal"
+                  : `Review cycle ${submission.number - 1}`
+              }
+              submittedAt={submission.submittedAt}
+            />
 
             <div className="flex flex-col gap-10">
-              <Submission
+              <SubmittedFiles
                 heading="What we submitted"
-                documents={cycle.documents.map(({ document }) => document)}
-                answered={letterForCycle.get(cycle.number - 1)}
+                documents={submission.documents.map(({ document, kind }) => ({ ...document, kind }))}
+                answered={answered}
                 empty="No files were submitted."
               />
-              {letter ? (
+              {answered && (
                 <LetterComments
-                  letter={letter}
+                  letter={answered}
                   approvalId={approval.id}
-                  editable={latest && approval.status === "comments"}
+                  editable={false}
                   files={files}
                   members={members}
                 />
-              ) : (
-                latest &&
-                approval.status === "submitted" && (
-                  <section>
-                    <h3 className="text-base font-semibold">Plan review comments</h3>
-                    <p className="mt-2 text-sm text-ink-muted">
-                      Waiting on comments from {approval.permit.project.ahjName}.
-                    </p>
-                  </section>
-                )
               )}
             </div>
           </section>
@@ -369,7 +386,7 @@ function LetterComments({
   const comments: LedgerComment[] = letter.comments.map((c) => ({
     id: c.id,
     number: c.number,
-    title: c.title ?? c.text,
+    title: c.title,
     discipline: c.discipline,
     text: c.text,
     sheetRefs: c.sheetRefs,
@@ -388,22 +405,25 @@ function LetterComments({
         // Remount when parsing finishes so the rows start from the new data.
         key={`${letter.documentId}-${letter.parseStatus}`}
         approvalId={approvalId}
+        letterId={letter.documentId}
         editable={editable}
         comments={comments}
         files={files}
-        letterUrl={letterUrl}
         members={members}
+        // Comments can be added by hand once parsing has finished, including
+        // when it failed or found nothing.
+        canAdd={editable && letter.parseStatus !== "processing"}
         notice={notice}
       />
     </>
   );
 }
 
-/** "Review cycle N", with when it went out or that it hasn't yet. */
-function CycleHeader({ number, submittedAt }: { number: number; submittedAt?: Date }) {
+/** "Initial submittal" or "Review cycle N", with when it went out or that it hasn't yet. */
+function SectionHeader({ title, submittedAt }: { title: string; submittedAt?: Date }) {
   return (
     <header className="mb-6 flex items-baseline justify-between gap-4 text-ink">
-      <h2 className="text-xl font-semibold">Review cycle {number}</h2>
+      <h2 className="text-xl font-semibold">{title}</h2>
       <span className="text-sm text-ink-muted">
         {submittedAt ? `Submitted ${longDate(submittedAt)}` : "Not submitted yet"}
       </span>
@@ -412,55 +432,69 @@ function CycleHeader({ number, submittedAt }: { number: number; submittedAt?: Da
 }
 
 /**
- * The files in a submission. From the second cycle on, that's the response
- * letter to the previous cycle's comments, plus supplementary files.
+ * The files in a submission. A resubmittal holds the response letter to the
+ * comments it answers, plus supplementary files.
  */
-async function Submission({
+async function SubmittedFiles({
   heading,
   documents,
   answered,
   empty,
 }: {
   heading: string;
-  documents: { id: string; name: string; filePath: string | null }[];
+  documents: { id: string; name: string; filePath: string | null; kind: DocumentKind }[];
   answered?: Letter;
   empty: string;
 }) {
-  const files = await Promise.all(
-    documents
-      .filter((document) => document.filePath)
-      .map(async (document) => ({
-        id: document.id,
-        name: document.name,
-        href: `/api/files/${document.filePath}`,
-        meta: `${fileMeta(document.filePath!, await uploadSize(document.filePath!))} · ${uploadedFileName(document.filePath!)}`,
-      }))
+  // Response letters are generated, so they live apart from uploads.
+  const describe = async (document: (typeof documents)[number]) => {
+    const generated = document.kind === "response_letter";
+    const size = generated
+      ? await generatedPdfSize(document.filePath!)
+      : await uploadSize(document.filePath!);
+    return {
+      id: document.id,
+      name: document.name,
+      href: `${generated ? "/api/generated-pdfs" : "/api/files"}/${document.filePath}`,
+      meta: `${fileMeta(document.filePath!, size)} · ${uploadedFileName(document.filePath!)}`,
+    };
+  };
+  const withFiles = documents.filter((document) => document.filePath);
+  const stored = withFiles.find((document) => document.kind === "response_letter");
+  const supplementary = await Promise.all(
+    withFiles.filter((document) => document !== stored).map(describe)
   );
+
+  // The response letter: the copy stored when it went out, or else one
+  // generated from the saved responses on download (a draft while they can
+  // still change).
+  const responseFile = stored
+    ? await describe(stored)
+    : answered && {
+        id: `response-${answered.documentId}`,
+        name: "Response letter",
+        meta: `PDF · generated on download · ${responseLetterFileName(answered.round)}`,
+        action: (
+          <DownloadButton
+            href={`/api/comment-letters/${answered.documentId}/response-letter`}
+            fileName={responseLetterFileName(answered.round)}
+          />
+        ),
+      };
 
   return (
     <section>
       <h3 className="mb-3 text-base font-semibold">{heading}</h3>
 
-      {/* Generating the response letter isn't built yet, so its row has no file. */}
-      {answered && (
-        <FileList
-          files={[
-            {
-              id: `response-${answered.documentId}`,
-              name: `Response to review cycle ${answered.round} comments`,
-              meta: `PDF · not generated yet · response-to-review-cycle-${answered.round}.pdf`,
-            },
-          ]}
-        />
-      )}
+      {responseFile && <FileList files={[responseFile]} />}
 
       {answered && (
         <div className="mt-5 mb-2 font-mono text-caption tracking-label text-ink-muted">
           SUPPLEMENTARY FILES
         </div>
       )}
-      {files.length > 0 ? (
-        <FileList files={files} />
+      {supplementary.length > 0 ? (
+        <FileList files={supplementary} />
       ) : (
         <p className="text-sm text-ink-muted">{empty}</p>
       )}
@@ -468,11 +502,11 @@ async function Submission({
   );
 }
 
-/** Files as one bordered list. Files without an `href` show a disabled View. */
+/** Files as one bordered list, each with a View link or its own `action`. */
 function FileList({
   files,
 }: {
-  files: { id: string; name: string; meta: string; href?: string }[];
+  files: { id: string; name: string; meta: string; href?: string; action?: ReactNode }[];
 }) {
   return (
     <ul className="divide-y divide-line-row rounded-lg border border-line bg-white">
@@ -486,17 +520,16 @@ function FileList({
             <div className="truncate text-sm">{file.name}</div>
             <div className="text-tiny text-ink-muted">{file.meta}</div>
           </div>
-          {file.href ? (
-            <a
-              href={file.href}
-              target="_blank"
-              className="flex-none text-small text-accent hover:text-accent-hover"
-            >
-              View
-            </a>
-          ) : (
-            <span className="flex-none text-small text-ink-placeholder">View</span>
-          )}
+          {file.action ??
+            (file.href && (
+              <a
+                href={file.href}
+                target="_blank"
+                className="flex-none text-small text-accent hover:text-accent-hover"
+              >
+                View
+              </a>
+            ))}
         </li>
       ))}
     </ul>

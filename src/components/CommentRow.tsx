@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { CommentType } from "@prisma/client";
+import { clearPendingSave, trackPendingSave } from "@/lib/pending-saves";
+import { useDismiss } from "@/lib/use-dismiss";
+import { displayNumber } from "@/lib/format";
+import { FOCUS_RING, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/ledger-styles";
+import { CommentEditor, type CommentFields } from "@/components/CommentEditor";
 
 export type LedgerComment = {
   id: string;
   number: string;
-  title: string;
+  title: string | null;
   discipline: string | null;
   text: string;
   sheetRefs: string[];
@@ -28,11 +33,6 @@ export type RowMenu = "files" | "assignee";
 /** Columns shared by the header row and each comment row. */
 export const ROW_GRID = "grid grid-cols-[20px_44px_minmax(0,1fr)_112px_104px] gap-x-3 px-5";
 
-export const LABEL = "font-mono text-caption tracking-label text-ink-muted";
-
-const FOCUS_RING =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-
 type Status = "open" | "draft" | "completed" | "info" | "admin";
 
 const STATUS: Record<Status, { label: string; className: string }> = {
@@ -42,10 +42,6 @@ const STATUS: Record<Status, { label: string; className: string }> = {
   info: { label: "Info", className: "bg-canvas text-ink-muted" },
   admin: { label: "Admin", className: "bg-canvas text-ink-muted" },
 };
-
-const BUTTON = "inline-flex h-9 flex-none cursor-pointer items-center gap-2 rounded-md px-3 whitespace-nowrap text-small font-medium disabled:cursor-default disabled:opacity-50";
-const SECONDARY_BUTTON = `${BUTTON} border border-line-strong bg-white text-ink`;
-const PRIMARY_BUTTON = `${BUTTON} bg-accent text-white hover:bg-accent-hover`;
 
 // Disciplines come from the letter as printed, so match on keywords.
 const DISCIPLINE_COLORS: [RegExp, string][] = [
@@ -98,9 +94,6 @@ function shortName(name: string) {
   return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
 }
 
-/** "4" → "004". Labels like "A-1" or "TE 1" stay as printed. */
-const displayNumber = (number: string) => (/^\d+$/.test(number) ? number.padStart(3, "0") : number);
-
 /** Splits text around the cited references; odd entries are the references. */
 function splitRefs(text: string, refs: string[]) {
   const unique = [...new Set(refs.filter(Boolean))].sort((a, b) => b.length - a.length);
@@ -142,32 +135,6 @@ function RefCopy({ code, children }: { code: string; children: ReactNode }) {
       </span>
     </button>
   );
-}
-
-/** Closes a popover on a click outside `area` or on Escape, which returns focus to its button. */
-function useDismiss(
-  open: boolean,
-  area: RefObject<HTMLElement | null>,
-  button: RefObject<HTMLButtonElement | null>,
-  onClose: () => void
-) {
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (!area.current?.contains(event.target as Node)) onClose();
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      onClose();
-      button.current?.focus();
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open, area, button, onClose]);
 }
 
 // The first avatar sits on top of the ones it overlaps.
@@ -298,10 +265,13 @@ export function CommentRow({
   onResponseChange,
   completed,
   onToggleCompleted,
+  onEditComment,
+  onDeleteComment,
   files,
   attachedIds,
   onToggleFile,
   onUploadFile,
+  letterHref,
   assignees,
   members,
   onToggleAssignee,
@@ -319,10 +289,14 @@ export function CommentRow({
   onResponseChange: (value: string) => void;
   completed: boolean;
   onToggleCompleted: () => void;
+  onEditComment: (fields: CommentFields) => Promise<string | null>;
+  onDeleteComment: () => Promise<string | null>;
   files: LedgerFile[];
   attachedIds: string[];
   onToggleFile: (fileId: string) => void;
   onUploadFile: (file: File) => Promise<boolean>;
+  /** The letter viewer, with this comment highlighted. */
+  letterHref: string;
   assignees: Member[];
   members: Member[];
   onToggleAssignee: (userId: string) => void;
@@ -339,7 +313,10 @@ export function CommentRow({
   const status = STATUS[statusOf(comment.commentType, response, completed)];
   const primarySheet = comment.sheetRefs[0];
   const attached = files.filter((file) => attachedIds.includes(file.id));
-  const hasRefs = comment.sheetRefs.length > 0 || comment.codeRefs.length > 0;
+  const [editingComment, setEditingComment] = useState(false);
+  // The references panel steps aside while editing, so the form gets the full width.
+  const hasRefs =
+    !editingComment && (comment.sheetRefs.length > 0 || comment.codeRefs.length > 0);
   // A correction needs a written response before it can be completed.
   const canComplete = completed || comment.commentType !== "correction" || !!response.trim();
 
@@ -352,12 +329,15 @@ export function CommentRow({
     saveTimer.current = null;
     const request = ++latestSave.current;
     setSaveState("saving");
-    const res = await fetch(`/api/comments/${comment.id}`, {
+    const saving = fetch(`/api/comments/${comment.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response: value }),
     }).catch(() => null);
+    trackPendingSave(comment.id, () => saving.then(() => {}));
+    const res = await saving;
     if (request !== latestSave.current) return; // a newer save has started
+    clearPendingSave(comment.id);
     setSaveState(!res?.ok ? "error" : value.trim() ? "saved" : "idle");
   }
 
@@ -366,6 +346,11 @@ export function CommentRow({
     setSaveState("saving"); // unsaved from the first keystroke until the server confirms
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(value), 800);
+    // A download can't wait out the debounce, so it saves this value right away.
+    trackPendingSave(comment.id, () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      return save(value);
+    });
   }
 
   function flushResponse() {
@@ -423,7 +408,7 @@ export function CommentRow({
         </button>
         <span className="flex min-w-0 flex-col gap-1 pr-6">
           <span id={`${id}-title`} className="truncate text-body font-semibold">
-            {comment.title}
+            {comment.title || comment.text}
           </span>
           {(comment.discipline || primarySheet) && (
             <span className="flex min-w-0 items-center gap-1.75 text-caption font-semibold tracking-label text-ink-secondary uppercase">
@@ -465,18 +450,54 @@ export function CommentRow({
         >
           <div className="flex min-w-0 flex-col gap-5.5">
             <section className="flex flex-col gap-2">
-              <div className={LABEL}>AHJ COMMENT</div>
-              <p className="text-body leading-6 whitespace-pre-line text-ink-body">
-                {splitRefs(comment.text, [...comment.sheetRefs, ...comment.codeRefs]).map((part, i) =>
-                  i % 2 ? (
-                    <span key={i} className="font-mono text-small font-semibold text-ink">
-                      {part}
-                    </span>
-                  ) : (
-                    part
-                  )
-                )}
-              </p>
+              <div className="flex items-baseline justify-between gap-3">
+                <div className={LABEL}>AHJ COMMENT</div>
+                <a
+                  href={letterHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex items-center gap-0.5 rounded-xs text-small text-accent hover:text-accent-hover ${FOCUS_RING}`}
+                >
+                  View in letter
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
+                </a>
+              </div>
+              {editingComment ? (
+                <CommentEditor
+                  initial={{
+                    number: comment.number,
+                    title: comment.title ?? "",
+                    discipline: comment.discipline ?? "",
+                    text: comment.text,
+                    commentType: comment.commentType,
+                    sheetRefs: comment.sheetRefs,
+                    codeRefs: comment.codeRefs,
+                  }}
+                  saveLabel="Save"
+                  onSave={async (fields) => {
+                    const failed = await onEditComment(fields);
+                    if (!failed) setEditingComment(false);
+                    return failed;
+                  }}
+                  onCancel={() => setEditingComment(false)}
+                  onDelete={onDeleteComment}
+                />
+              ) : (
+                <p className="text-body leading-6 whitespace-pre-line text-ink-body">
+                  {splitRefs(comment.text, [...comment.sheetRefs, ...comment.codeRefs]).map(
+                    (part, i) =>
+                      i % 2 ? (
+                        <span key={i} className="font-mono text-small font-semibold text-ink">
+                          {part}
+                        </span>
+                      ) : (
+                        part
+                      )
+                  )}
+                </p>
+              )}
             </section>
 
             <section className="flex flex-col gap-2">
@@ -569,6 +590,20 @@ export function CommentRow({
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </button>
+
+                {!editingComment && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingComment(true)}
+                    className={`${SECONDARY_BUTTON} ${FOCUS_RING}`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                    </svg>
+                    Edit comment
+                  </button>
+                )}
 
                 {attached.map((file) => (
                   <span key={file.id} className="inline-flex h-7 max-w-60 items-center gap-1.5 rounded-chip bg-chip pr-1 pl-2.5 text-meta text-chip-ink">

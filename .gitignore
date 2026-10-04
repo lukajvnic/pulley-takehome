@@ -43,6 +43,9 @@ next-env.d.ts
 # uploaded files
 /uploads
 
+# generated PDFs (submitted response letters)
+/generated-pdfs
+
 # keep the example env
 !.env.example
 

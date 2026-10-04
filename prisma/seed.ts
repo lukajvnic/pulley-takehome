@@ -1,7 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CommentType } from "@prisma/client";
 import fs from "node:fs";
 import path from "node:path";
-import { startReviewCycle } from "../src/lib/review-cycles";
+import { recordSubmission } from "../src/lib/submissions";
 
 const db = new PrismaClient();
 
@@ -61,10 +61,63 @@ const needed = (name: string) => ({
   submittal: { create: { status: "needed" as const } },
 });
 
+/**
+ * Adds a sample comment letter to an approval as if it had been uploaded and
+ * parsed. The parsed comments come from prisma/seed-letters/<letter>.json, a
+ * saved parse of the PDF in sample-letters/, so seeding needs no API key.
+ */
+async function seedCommentLetter(approvalId: string, letterName: string) {
+  const parsed = JSON.parse(
+    fs.readFileSync(
+      path.join(process.cwd(), "prisma", "seed-letters", letterName.replace(/\.pdf$/, ".json")),
+      "utf8"
+    )
+  ) as {
+    letterDate: string | null;
+    reviewerName: string | null;
+    comments: {
+      number: string;
+      discipline: string | null;
+      title: string | null;
+      page: number | null;
+      text: string;
+      sheetRefs: string[];
+      codeRefs: string[];
+      commentType: CommentType;
+    }[];
+  };
+
+  const filename = `seed-${++seq}-${letterName}`;
+  fs.mkdirSync(UPLOADS, { recursive: true });
+  fs.copyFileSync(path.join(process.cwd(), "sample-letters", letterName), path.join(UPLOADS, filename));
+
+  const letterDate = parsed.letterDate ? new Date(`${parsed.letterDate}T12:00:00Z`) : null;
+  await db.document.create({
+    data: {
+      approvalId,
+      type: "comment_letter",
+      name: letterName,
+      filePath: filename,
+      uploadedAt: letterDate ?? new Date(),
+      commentLetter: {
+        create: {
+          round: 1,
+          parseStatus: "done",
+          letterDate,
+          reviewerName: parsed.reviewerName,
+          comments: {
+            create: parsed.comments.map((comment, i) => ({ ...comment, position: i + 1 })),
+          },
+        },
+      },
+    },
+  });
+}
+
 async function main() {
   // Reset everything so the seed is idempotent.
   await db.document.deleteMany();
-  await db.reviewCycle.deleteMany();
+  await db.submission.deleteMany();
   await db.approval.deleteMany();
   await db.permit.deleteMany();
   await db.projectMember.deleteMany();
@@ -115,13 +168,14 @@ async function main() {
     },
   });
 
-  // Starts in preparing so the full flow (submit, comments received, upload
-  // the Oakview letter) can be run from the beginning.
-  await db.approval.create({
+  // Comments received from the jurisdiction: the Oakview letter, already parsed
+  // (see seedCommentLetter below).
+  const harborBuildingReview = await db.approval.create({
     data: {
       permitId: harborBuildingPermit.id,
       name: "Building Plan Review",
-      status: "preparing",
+      status: "comments",
+      submittedAt: new Date("2026-06-22T12:00:00Z"),
     },
   });
 
@@ -177,7 +231,7 @@ async function main() {
     },
   });
 
-  await db.permit.create({
+  const healthPermit = await db.permit.create({
     data: {
       projectId: sunrise.id,
       name: "Health Permit",
@@ -185,13 +239,15 @@ async function main() {
       approvals: {
         create: [
           {
-            // Starts in preparing; the Mesa letter is uploaded after submitting.
+            // A second approval sitting in `comments`, for a different jurisdiction.
             name: "Environmental Health Plan Review",
-            status: "preparing",
+            status: "comments",
+            submittedAt: new Date("2026-07-01T12:00:00Z"),
           },
         ],
       },
     },
+    include: { approvals: true },
   });
 
   await db.permit.create({
@@ -255,14 +311,18 @@ async function main() {
     },
   });
 
-  // Approvals that already went out start with their first review cycle,
-  // holding the package that was submitted.
+  // Approvals that already went out have their initial submittal recorded,
+  // holding the package that was sent.
   const sent = await db.approval.findMany({
-    where: { status: { in: ["submitted", "approved"] } },
+    where: { status: { in: ["submitted", "comments", "approved"] } },
   });
   for (const approval of sent) {
-    await startReviewCycle(db, approval.id, approval.submittedAt ?? june);
+    await recordSubmission(db, approval.id, approval.submittedAt ?? june);
   }
+
+  // The two approvals in `comments` have their sample letters in, parsed.
+  await seedCommentLetter(harborBuildingReview.id, "comment-letter-oakview-building.pdf");
+  await seedCommentLetter(healthPermit.approvals[0].id, "comment-letter-mesa-health.pdf");
 
   console.log("Seed complete.");
 }
