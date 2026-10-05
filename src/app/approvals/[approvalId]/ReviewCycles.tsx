@@ -6,6 +6,7 @@ import type { Member } from "@/components/AssigneePicker";
 import type { LedgerFile } from "@/components/AttachFiles";
 import { DownloadButton } from "@/components/DownloadButton";
 import { FileList, type ListedFile } from "@/components/FileList";
+import { SpinnerIcon } from "@/components/icons";
 import { RemoveFileButton } from "@/components/RemoveFileButton";
 import { UploadButton } from "@/components/UploadButton";
 import { LABEL, LINK } from "@/components/styles";
@@ -156,7 +157,10 @@ function LetterComments({
 
   const notice =
     letter.parseStatus === "processing" ? (
-      <>Reading the comments in {letterLink}. This takes a few seconds.</>
+      <span className="flex items-center gap-2.5">
+        <SpinnerIcon className="flex-none text-ink-muted" />
+        <span>Reading the comments in {letterLink}. This takes a few seconds.</span>
+      </span>
     ) : letter.parseStatus === "failed" ? (
       <>Couldn&apos;t read the comments in {letterLink}.</>
     ) : letter.comments.length === 0 ? (

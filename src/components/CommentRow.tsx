@@ -6,7 +6,7 @@ import { clearPendingSave, trackPendingSave } from "@/lib/pending-saves";
 import { patchComment } from "@/lib/requests";
 import { displayNumber } from "@/lib/format";
 import { FOCUS_RING, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
-import { CheckIcon } from "@/components/icons";
+import { CheckIcon, SpinnerIcon } from "@/components/icons";
 import { ExternalLink } from "@/components/links";
 import { AssigneePicker, type Member } from "@/components/AssigneePicker";
 import { AttachFiles, FileChip, type LedgerFile } from "@/components/AttachFiles";
@@ -402,10 +402,7 @@ export function CommentRow({
                   )}
                   {saveState === "saving" && (
                     <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-spin" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9" className="opacity-25" />
-                        <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
-                      </svg>
+                      <SpinnerIcon />
                       Saving…
                     </>
                   )}

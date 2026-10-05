@@ -59,3 +59,11 @@ export const FileIcon = ({ size = 18, className }: IconProps) => (
     <path d="M14 3v5h5" />
   </Icon>
 );
+
+/** Turns while something is in progress. */
+export const SpinnerIcon = ({ size = 14, className = "" }: IconProps) => (
+  <Icon size={size} strokeWidth={2.5} className={`animate-spin ${className}`}>
+    <circle cx="12" cy="12" r="9" className="opacity-25" />
+    <path d="M21 12a9 9 0 0 0-9-9" />
+  </Icon>
+);
