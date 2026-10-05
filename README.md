@@ -58,6 +58,8 @@ There is no auth. The app assumes a single logged-in PM (Ana Reyes).
 
 This section gives a high-level overview of the technical design decisions made.
 
+Take a look at a Loom walkthrough of the app [here](https://www.loom.com/share/678127b9733546f1b663c9124e81e81d).
+
 ## Prisma
 
 ### Original Schema
