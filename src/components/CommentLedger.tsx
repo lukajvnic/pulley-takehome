@@ -53,8 +53,8 @@ export function CommentLedger({
   canAdd: boolean;
   notice?: ReactNode;
 }) {
-  // Refreshing re-renders the server parts of the page (like "To submit")
-  // while keeping this component's state.
+  // Refreshing after an upload re-renders the server parts of the page (the new
+  // file in "To submit" and the file list) while keeping this component's state.
   const router = useRouter();
   const [rows, setRows] = useState(comments);
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -77,8 +77,6 @@ export function CommentLedger({
           row.id === commentId && row[key] === value ? { ...row, [key]: before } : row
         )
       );
-    } else if (key === "attachmentIds") {
-      router.refresh(); // attached files make up "To submit"
     }
   }
 
@@ -94,7 +92,6 @@ export function CommentLedger({
     const res = await fetch(`/api/comments/${commentId}`, { method: "DELETE" }).catch(() => null);
     if (!res?.ok) return (await errorOf(res)) ?? "Couldn't delete the comment.";
     setRows((current) => current.filter((row) => row.id !== commentId));
-    router.refresh(); // its attachments may drop out of "To submit"
     return null;
   }
 

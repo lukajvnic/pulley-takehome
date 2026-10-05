@@ -29,23 +29,24 @@ type Letter = Awaited<ReturnType<typeof loadLetter>>;
 type Comment = Letter["comments"][number];
 
 /**
- * The files that go with the response: once it's gone out, the ones sent with
- * it; until then, the ones uploaded since the last submission, which is what
- * submitting sends.
+ * The package the response goes out with: once it's sent, its submission and
+ * the files in it; until then no submission yet, and the files uploaded since
+ * the last one, which is what submitting sends.
  */
-async function loadEnclosures(approvalId: string, round: number) {
+async function loadPackage(approvalId: string, round: number) {
   const sent = await db.submission.findUnique({
     where: { approvalId_number: { approvalId, number: round + 1 } },
   });
+  const submissionId = sent?.id ?? null;
   const documents = await db.document.findMany({
     where: {
       approvalId,
-      submittal: { kind: "required_upload", status: "uploaded", submissionId: sent?.id ?? null },
+      submittal: { kind: "required_upload", status: "uploaded", submissionId },
     },
     orderBy: { name: "asc" },
     select: { name: true },
   });
-  return documents.map((document) => document.name);
+  return { submissionId, enclosures: documents.map((document) => document.name) };
 }
 
 // Colors mirror the app's ink tokens (globals.css); PDFs can't read CSS variables.
@@ -106,6 +107,19 @@ function bySection(comments: Comment[]) {
   return sections;
 }
 
+/**
+ * A comment's attached files, split into the ones going out with this response
+ * and the ones the jurisdiction already has from an earlier submission.
+ */
+function attachedFiles(comment: Comment, submissionId: string | null) {
+  const names = (enclosed: boolean) =>
+    comment.attachments
+      .filter((attachment) => (attachment.submissionId === submissionId) === enclosed)
+      .map((attachment) => attachment.document.name)
+      .join(", ");
+  return { enclosed: names(true), earlier: names(false) };
+}
+
 function responseText(comment: Comment, draft: boolean) {
   if (comment.response?.trim()) return comment.response.trim();
   if (comment.commentType !== "correction") return "Acknowledged. No response required.";
@@ -114,11 +128,13 @@ function responseText(comment: Comment, draft: boolean) {
 
 function ResponseLetter({
   letter,
+  submissionId,
   enclosures,
   date,
   draft,
 }: {
   letter: Letter;
+  submissionId: string | null;
   enclosures: string[];
   date: Date;
   draft: boolean;
@@ -176,23 +192,23 @@ function ResponseLetter({
                 {section.discipline}
               </Text>
             )}
-            {section.comments.map((comment) => (
-              <View key={comment.id} style={styles.item} wrap={false}>
-                <Text style={styles.number}>{comment.number || "·"}</Text>
-                <View style={styles.itemBody}>
-                  <Text style={styles.comment}>{comment.text}</Text>
-                  <Text>
-                    <Text style={styles.bold}>Response: </Text>
-                    {responseText(comment, draft)}
-                  </Text>
-                  {comment.attachments.length > 0 && (
-                    <Text style={styles.muted}>
-                      Enclosed: {comment.attachments.map((a) => a.document.name).join(", ")}
+            {section.comments.map((comment) => {
+              const { enclosed, earlier } = attachedFiles(comment, submissionId);
+              return (
+                <View key={comment.id} style={styles.item} wrap={false}>
+                  <Text style={styles.number}>{comment.number || "·"}</Text>
+                  <View style={styles.itemBody}>
+                    <Text style={styles.comment}>{comment.text}</Text>
+                    <Text>
+                      <Text style={styles.bold}>Response: </Text>
+                      {responseText(comment, draft)}
                     </Text>
-                  )}
+                    {enclosed && <Text style={styles.muted}>Enclosed: {enclosed}</Text>}
+                    {earlier && <Text style={styles.muted}>Previously submitted: {earlier}</Text>}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         ))}
 
@@ -234,9 +250,15 @@ export async function renderResponseLetter(
   { draft, date = new Date() }: { draft: boolean; date?: Date }
 ) {
   const letter = await loadLetter(letterId);
-  const enclosures = await loadEnclosures(letter.document.approvalId, letter.round);
+  const { submissionId, enclosures } = await loadPackage(letter.document.approvalId, letter.round);
   const pdf = await renderToBuffer(
-    <ResponseLetter letter={letter} enclosures={enclosures} date={date} draft={draft} />
+    <ResponseLetter
+      letter={letter}
+      submissionId={submissionId}
+      enclosures={enclosures}
+      date={date}
+      draft={draft}
+    />
   );
   return { pdf, fileName: responseLetterFileName(letter.round) };
 }

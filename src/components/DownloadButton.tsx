@@ -23,7 +23,8 @@ export function DownloadButton({ href, fileName }: { href: string; fileName: str
       link.href = url;
       link.download = fileName;
       link.click();
-      URL.revokeObjectURL(url);
+      // Safari can still be reading the blob just after the click.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } else {
       setFailed(true);
     }

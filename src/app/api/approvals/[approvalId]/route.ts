@@ -66,7 +66,8 @@ export async function PATCH(
 
   const updated = await db.$transaction(async (tx) => {
     if (submitting) {
-      // Moving on from comments means sending the response, with its attachments.
+      // Every submission records the package it sends; an answer to comments
+      // also sends the response letter.
       const submission = await recordSubmission(tx, approval.id, now);
       if (responsePath) {
         await tx.document.create({
