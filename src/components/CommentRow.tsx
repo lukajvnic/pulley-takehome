@@ -148,10 +148,10 @@ export function CommentRow({
   // The response is typed here, so keystrokes re-render only this row.
   const [response, setResponse] = useState(comment.response);
   const status = STATUS[statusOf(comment.commentType, response, completed)];
-  const primarySheet = comment.sheetRefs[0];
+  // Only files still in the package: one removed from "To submit" drops out here too.
   const attached = files.filter((file) => comment.attachmentIds.includes(file.id));
-  const toggleFile = (fileId: string) =>
-    onUpdate("attachmentIds", toggled(comment.attachmentIds, fileId));
+  const attachedIds = attached.map((file) => file.id);
+  const toggleFile = (fileId: string) => onUpdate("attachmentIds", toggled(attachedIds, fileId));
   const [editingComment, setEditingComment] = useState(false);
   // The references panel steps aside while editing, so the form gets the full width.
   const hasRefs =
@@ -229,19 +229,10 @@ export function CommentRow({
           <span id={`${id}-title`} className="truncate text-body font-semibold">
             {comment.title || comment.text}
           </span>
-          {(comment.discipline || primarySheet) && (
+          {comment.discipline && (
             <span className="flex min-w-0 items-center gap-1.75 text-caption font-semibold tracking-label text-ink-secondary uppercase">
-              {comment.discipline && (
-                <>
-                  <span className={`size-2 flex-none rounded-xs ${disciplineColor(comment.discipline)}`} />
-                  <span className="truncate">{comment.discipline}</span>
-                </>
-              )}
-              {primarySheet && (
-                <span className="flex-none font-mono font-normal tracking-normal text-ink-muted normal-case">
-                  {comment.discipline ? `· ${primarySheet}` : primarySheet}
-                </span>
-              )}
+              <span className={`size-2 flex-none rounded-xs ${disciplineColor(comment.discipline)}`} />
+              <span className="truncate">{comment.discipline}</span>
             </span>
           )}
         </span>
@@ -377,7 +368,7 @@ export function CommentRow({
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <AttachFiles
                   files={files}
-                  attachedIds={comment.attachmentIds}
+                  attachedIds={attachedIds}
                   onToggle={toggleFile}
                   onUpload={onUploadFile}
                 />

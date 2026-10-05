@@ -28,6 +28,26 @@ const loadLetter = (letterId: string) =>
 type Letter = Awaited<ReturnType<typeof loadLetter>>;
 type Comment = Letter["comments"][number];
 
+/**
+ * The files that go with the response: once it's gone out, the ones sent with
+ * it; until then, the ones uploaded since the last submission, which is what
+ * submitting sends.
+ */
+async function loadEnclosures(approvalId: string, round: number) {
+  const sent = await db.submission.findUnique({
+    where: { approvalId_number: { approvalId, number: round + 1 } },
+  });
+  const documents = await db.document.findMany({
+    where: {
+      approvalId,
+      submittal: { kind: "required_upload", status: "uploaded", submissionId: sent?.id ?? null },
+    },
+    orderBy: { name: "asc" },
+    select: { name: true },
+  });
+  return documents.map((document) => document.name);
+}
+
 // Colors mirror the app's ink tokens (globals.css); PDFs can't read CSS variables.
 const INK = "#17191c";
 const MUTED = "#5b606a";
@@ -92,18 +112,23 @@ function responseText(comment: Comment, draft: boolean) {
   return draft ? "Response pending." : "No response provided.";
 }
 
-function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; draft: boolean }) {
+function ResponseLetter({
+  letter,
+  enclosures,
+  date,
+  draft,
+}: {
+  letter: Letter;
+  enclosures: string[];
+  date: Date;
+  draft: boolean;
+}) {
   const { approval } = letter.document;
   const { permit } = approval;
   const { project } = permit;
   // No auth yet, so the letter is signed by the project's PM.
   const signer =
     project.members.find((m) => m.user.role === "pm")?.user ?? project.members[0]?.user;
-  const enclosures = [
-    ...new Map(
-      letter.comments.flatMap((c) => c.attachments.map((a) => [a.documentId, a.document.name]))
-    ).values(),
-  ];
   const title = `Response to review cycle ${letter.round} comments`;
 
   return (
@@ -174,8 +199,8 @@ function ResponseLetter({ letter, date, draft }: { letter: Letter; date: Date; d
         {enclosures.length > 0 && (
           <View style={{ marginTop: 8 }} wrap={false}>
             <Text style={styles.bold}>Enclosures</Text>
-            {enclosures.map((name) => (
-              <Text key={name}>· {name}</Text>
+            {enclosures.map((name, i) => (
+              <Text key={i}>· {name}</Text>
             ))}
           </View>
         )}
@@ -209,6 +234,9 @@ export async function renderResponseLetter(
   { draft, date = new Date() }: { draft: boolean; date?: Date }
 ) {
   const letter = await loadLetter(letterId);
-  const pdf = await renderToBuffer(<ResponseLetter letter={letter} date={date} draft={draft} />);
+  const enclosures = await loadEnclosures(letter.document.approvalId, letter.round);
+  const pdf = await renderToBuffer(
+    <ResponseLetter letter={letter} enclosures={enclosures} date={date} draft={draft} />
+  );
   return { pdf, fileName: responseLetterFileName(letter.round) };
 }

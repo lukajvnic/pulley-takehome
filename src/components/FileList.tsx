@@ -12,7 +12,7 @@ export type ListedFile = {
   action?: ReactNode;
 };
 
-/** Files as one bordered list, each with a View link or its own `action`. */
+/** Files as one bordered list, each with a View link when stored, and any `action`. */
 export function FileList({ files }: { files: ListedFile[] }) {
   return (
     <ul className="divide-y divide-line-row rounded-lg border border-line bg-white">
@@ -25,17 +25,17 @@ export function FileList({ files }: { files: ListedFile[] }) {
               {file.fileName ? `${file.meta} · ${file.fileName}` : file.meta}
             </div>
           </div>
-          {file.action ??
-            (file.href && (
-              <a
-                href={file.href}
-                target="_blank"
-                aria-label={`View ${file.name}`}
-                className={`flex-none text-small ${LINK}`}
-              >
-                View
-              </a>
-            ))}
+          {file.href && (
+            <a
+              href={file.href}
+              target="_blank"
+              aria-label={`View ${file.name}`}
+              className={`flex-none text-small ${LINK}`}
+            >
+              View
+            </a>
+          )}
+          {file.action}
         </li>
       ))}
     </ul>

@@ -6,6 +6,8 @@ import type { Member } from "@/components/AssigneePicker";
 import type { LedgerFile } from "@/components/AttachFiles";
 import { DownloadButton } from "@/components/DownloadButton";
 import { FileList, type ListedFile } from "@/components/FileList";
+import { RemoveFileButton } from "@/components/RemoveFileButton";
+import { UploadButton } from "@/components/UploadButton";
 import { LABEL, LINK } from "@/components/styles";
 import { longDate, responseLetterFileName } from "@/lib/format";
 import {
@@ -41,16 +43,16 @@ export async function ReviewCycles({ approval }: { approval: ApprovalWithDocs })
   );
 
   // While the team answers comments, the review cycle they belong to is on top,
-  // not submitted yet: the response letter, the files attached so far, and the
+  // not submitted yet: the response letter, the files added so far, and the
   // comments. Submitting sends exactly those files (see recordSubmission).
   const responding = approval.status === "comments";
   const latestNumber = submissions[0]?.number ?? 0;
   const openLetter = responding ? letterForRound.get(latestNumber) : undefined;
-  const attached = new Set(
-    openLetter?.comments.flatMap((c) => c.attachments.map((a) => a.documentId))
-  );
   const pending = approval.documents.filter(
-    (d) => d.submittal?.status === "uploaded" && !d.submittal.submissionId && attached.has(d.id)
+    (d) =>
+      d.submittal?.status === "uploaded" &&
+      d.submittal.kind === "required_upload" &&
+      !d.submittal.submissionId
   );
 
   return (
@@ -63,7 +65,8 @@ export async function ReviewCycles({ approval }: { approval: ApprovalWithDocs })
               heading="To submit"
               documents={pending.map((d) => ({ ...d, kind: d.submittal!.kind }))}
               answered={openLetter}
-              empty="No files attached yet."
+              empty="No files added yet."
+              addTo={approval.id}
             />
             {openLetter && (
               <LetterComments
@@ -198,23 +201,31 @@ function LetterComments({
 
 /**
  * The files in a submission. A resubmittal holds the response letter to the
- * comments it answers, plus supplementary files.
+ * comments it answers, plus supplementary files. Until it's sent (`addTo` is
+ * the approval), files can be added on their own and removed.
  */
 async function SubmittedFiles({
   heading,
   documents,
   answered,
   empty,
+  addTo,
 }: {
   heading: string;
   documents: { id: string; name: string; filePath: string | null; kind: DocumentKind }[];
   answered?: Letter;
   empty: string;
+  addTo?: string;
 }) {
   const withFiles = documents.filter(hasFile);
   const stored = withFiles.find((document) => document.kind === "response_letter");
   const supplementary = await Promise.all(
-    withFiles.filter((document) => document !== stored).map(describeFile)
+    withFiles
+      .filter((document) => document !== stored)
+      .map(async (document) => ({
+        ...(await describeFile(document)),
+        action: addTo && <RemoveFileButton documentId={document.id} name={document.name} />,
+      }))
   );
 
   // The response letter: the copy stored when it went out, or else one
@@ -246,6 +257,11 @@ async function SubmittedFiles({
         <FileList files={supplementary} />
       ) : (
         <p className="text-sm text-ink-muted">{empty}</p>
+      )}
+      {addTo && (
+        <div className="mt-3">
+          <UploadButton uploadUrl={`/api/approvals/${addTo}/documents`} label="Add file" />
+        </div>
       )}
     </section>
   );

@@ -1,15 +1,14 @@
 import type { Prisma } from "@prisma/client";
 
 /**
- * Records a package sent to the jurisdiction, holding the files that haven't
- * gone out before. The initial submittal sends the whole uploaded package; a
- * resubmittal answering comments sends only the files attached to them.
+ * Records a package sent to the jurisdiction, holding the files uploaded since
+ * the last one: the whole package for the initial submittal, then the files
+ * added while answering each set of comments.
  */
 export async function recordSubmission(
   client: Prisma.TransactionClient,
   approvalId: string,
-  submittedAt: Date,
-  { attachedOnly = false }: { attachedOnly?: boolean } = {}
+  submittedAt: Date
 ) {
   const latest = await client.submission.findFirst({
     where: { approvalId },
@@ -20,12 +19,7 @@ export async function recordSubmission(
     data: { approvalId, number: (latest?.number ?? 0) + 1, submittedAt },
   });
   await client.submittalDocument.updateMany({
-    where: {
-      submissionId: null,
-      status: "uploaded",
-      document: { approvalId },
-      ...(attachedOnly ? { comments: { some: {} } } : {}),
-    },
+    where: { submissionId: null, status: "uploaded", document: { approvalId } },
     data: { submissionId: submission.id },
   });
   return submission;

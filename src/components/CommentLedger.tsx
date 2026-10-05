@@ -15,7 +15,7 @@ import { ExternalLink } from "@/components/links";
 import { PlusIcon } from "@/components/icons";
 import { FOCUS_RING, LABEL } from "@/components/styles";
 import { errorOf, patchComment } from "@/lib/requests";
-import { fileMeta, plural } from "@/lib/format";
+import { plural } from "@/lib/format";
 
 type OwnFields = Pick<
   LedgerComment,
@@ -39,7 +39,7 @@ export function CommentLedger({
   letterId,
   editable,
   comments,
-  files: initialFiles,
+  files,
   members,
   canAdd,
   notice,
@@ -57,7 +57,6 @@ export function CommentLedger({
   // while keeping this component's state.
   const router = useRouter();
   const [rows, setRows] = useState(comments);
-  const [files, setFiles] = useState(initialFiles);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [adding, setAdding] = useState(false);
 
@@ -123,7 +122,7 @@ export function CommentLedger({
     return null;
   }
 
-  /** Adds a file to the package and attaches it to the comment. */
+  /** Adds a file to the package and attaches it to the comment; it lists once the page refreshes. */
   async function uploadFile(commentId: string, file: File) {
     const body = new FormData();
     body.append("file", file);
@@ -134,11 +133,7 @@ export function CommentLedger({
     }).catch(() => null);
     if (!res?.ok) return (await errorOf(res)) ?? "Upload failed. Please try again.";
 
-    const document: { id: string; name: string } = await res.json();
-    setFiles((current) => [
-      ...current,
-      { id: document.id, name: document.name, meta: fileMeta(file.name, file.size) },
-    ]);
+    const document: { id: string } = await res.json();
     setRows((current) =>
       current.map((row) =>
         row.id === commentId ? { ...row, attachmentIds: [...row.attachmentIds, document.id] } : row
