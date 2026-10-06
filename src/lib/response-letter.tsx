@@ -44,9 +44,9 @@ async function loadPackage(approvalId: string, round: number) {
       submittal: { kind: "required_upload", status: "uploaded", submissionId },
     },
     orderBy: { name: "asc" },
-    select: { name: true },
+    select: { id: true, name: true },
   });
-  return { submissionId, enclosures: documents.map((document) => document.name) };
+  return { submissionId, enclosures: documents };
 }
 
 // Colors mirror the app's ink tokens (globals.css); PDFs can't read CSS variables.
@@ -242,8 +242,9 @@ function ResponseLetter({
 }
 
 /**
- * Renders the response to a comment letter from what's saved now. Drafts are
- * marked so a downloaded copy can't be mistaken for the one that went out.
+ * Renders the response to a comment letter from what's saved now, with the ids
+ * of the files it lists as enclosed. Drafts are marked so a downloaded copy
+ * can't be mistaken for the one that went out.
  */
 export async function renderResponseLetter(
   letterId: string,
@@ -255,10 +256,14 @@ export async function renderResponseLetter(
     <ResponseLetter
       letter={letter}
       submissionId={submissionId}
-      enclosures={enclosures}
+      enclosures={enclosures.map((document) => document.name)}
       date={date}
       draft={draft}
     />
   );
-  return { pdf, fileName: responseLetterFileName(letter.round) };
+  return {
+    pdf,
+    fileName: responseLetterFileName(letter.round),
+    enclosedIds: enclosures.map((document) => document.id),
+  };
 }

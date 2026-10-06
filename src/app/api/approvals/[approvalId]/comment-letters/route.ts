@@ -27,13 +27,22 @@ export async function POST(
 
   const filePath = await saveUpload(file, `letter-${approval.id}`);
   const document = await db.$transaction(async (tx) => {
+    // Moving to comments first claims the approval: a second letter uploaded at
+    // the same time waits on this row, then finds it moved and isn't recorded
+    // as another letter for the same round.
+    const { count } = await tx.approval.updateMany({
+      where: { id: approval.id, status: "submitted" },
+      data: { status: "comments" },
+    });
+    if (count === 0) return null;
+
     // The letter is the jurisdiction's review of the latest submission, so its
     // round is that submission's number.
     const { number: round } = await tx.submission.findFirstOrThrow({
       where: { approvalId: approval.id },
       orderBy: { number: "desc" },
     });
-    const document = await tx.document.create({
+    return tx.document.create({
       data: {
         approvalId: approval.id,
         type: "comment_letter",
@@ -43,12 +52,10 @@ export async function POST(
         commentLetter: { create: { round } },
       },
     });
-    await tx.approval.update({
-      where: { id: approval.id },
-      data: { status: "comments" },
-    });
-    return document;
   });
+  if (!document) {
+    return fail(409, "Comment letters can only be added while the approval is submitted");
+  }
 
   after(() => parseCommentLetter(document.id));
 

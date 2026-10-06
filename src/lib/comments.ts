@@ -1,10 +1,11 @@
 import { CommentType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { fail } from "@/lib/http";
+import { findOpenLetter } from "@/lib/submissions";
 
 /**
  * Loads a comment letter with its approval. Its comments are editable only
- * while it is the approval's current letter and the team is responding.
+ * while the team is responding and it is the letter being answered.
  */
 export async function findLetter(letterId: string) {
   const letter = await db.commentLetter.findUnique({
@@ -14,13 +15,8 @@ export async function findLetter(letterId: string) {
   if (!letter) return null;
 
   const approval = letter.document.approval;
-  const latest = await db.commentLetter.findFirst({
-    where: { document: { approvalId: approval.id } },
-    orderBy: { round: "desc" },
-    select: { documentId: true },
-  });
-  const editable =
-    approval.status === "comments" && latest?.documentId === letter.documentId;
+  const open = approval.status === "comments" ? await findOpenLetter(db, approval.id) : null;
+  const editable = open?.documentId === letter.documentId;
 
   return { letter, approval, editable };
 }

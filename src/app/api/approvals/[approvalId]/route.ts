@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { ApprovalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { renderResponseLetter } from "@/lib/response-letter";
-import { recordSubmission } from "@/lib/submissions";
+import { findOpenLetter, recordSubmission } from "@/lib/submissions";
 import { saveGeneratedPdf } from "@/lib/storage";
 import { fail } from "@/lib/http";
+import { plural } from "@/lib/format";
 
 // Simplistic status changes: any status can move to any other status.
 export async function PATCH(
@@ -27,15 +28,20 @@ export async function PATCH(
   const responding = submitting && approval.status === "comments";
   const now = new Date();
 
+  // The checklist is the initial package, filled while preparing. Files still
+  // missing from it would never go out with any submission.
+  if (submitting && approval.status === "preparing") {
+    const missing = await db.submittalDocument.count({
+      where: { status: "needed", document: { approvalId: approval.id } },
+    });
+    if (missing > 0) return fail(409, `${plural(missing, "document")} still outstanding`);
+  }
+
   // A response goes out with its letter, generated once more from the final
   // responses and stored as the copy that was sent. Rendering happens before
-  // the transaction so it isn't held open.
-  const letter = responding
-    ? await db.commentLetter.findFirst({
-        where: { document: { approvalId: approval.id } },
-        orderBy: { round: "desc" },
-      })
-    : null;
+  // the transaction so it isn't held open. Only a letter on the latest
+  // submission is still unanswered.
+  const letter = responding ? await findOpenLetter(db, approval.id) : null;
   // Until parsing finishes there's nothing to answer yet.
   if (letter?.parseStatus === "processing") {
     return fail(409, "The comment letter is still being read");
@@ -55,20 +61,18 @@ export async function PATCH(
     }
   }
 
-  let responsePath: string | null = null;
-  if (letter) {
-    const { pdf, fileName } = await renderResponseLetter(letter.documentId, {
-      draft: false,
-      date: now,
-    });
-    responsePath = await saveGeneratedPdf(pdf, fileName, `response-${approval.id}`);
-  }
+  const response = letter
+    ? await renderResponseLetter(letter.documentId, { draft: false, date: now })
+    : null;
+  const responsePath = response
+    ? await saveGeneratedPdf(response.pdf, response.fileName, `response-${approval.id}`)
+    : null;
 
   const updated = await db.$transaction(async (tx) => {
     if (submitting) {
       // Every submission records the package it sends; an answer to comments
-      // also sends the response letter.
-      const submission = await recordSubmission(tx, approval.id, now);
+      // sends the files its letter lists, and the letter itself.
+      const submission = await recordSubmission(tx, approval.id, now, response?.enclosedIds);
       if (responsePath) {
         await tx.document.create({
           data: {
