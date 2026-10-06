@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "CommentLetter" ADD COLUMN     "parseStartedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

@@ -1,12 +1,23 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { after } from "next/server";
 import OpenAI from "openai";
-import { CommentType } from "@prisma/client";
+import { CommentType, type CommentLetter } from "@prisma/client";
 import { db } from "@/lib/db";
 import { UPLOADS_DIR } from "@/lib/storage";
 import { parseDay } from "@/lib/format";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
+
+/** How long the model gets to read a letter, retries included, before the parse fails. */
+const PARSE_TIMEOUT_MS = 3 * 60_000;
+
+/**
+ * A parse still running this long after it started has stopped without
+ * recording an outcome, e.g. the server restarted mid-parse. A live one has
+ * failed by now on PARSE_TIMEOUT_MS.
+ */
+const STALLED_AFTER_MS = PARSE_TIMEOUT_MS + 60_000;
 
 const INSTRUCTIONS = `You extract review comments from plan review comment letters that a jurisdiction (city, county, fire department, utility, etc.) sends back on a permit submittal.
 
@@ -108,7 +119,7 @@ async function extractComments(pdf: Buffer, filename: string): Promise<ParsedLet
     text: {
       format: { type: "json_schema", name: "comment_letter", schema: SCHEMA, strict: true },
     },
-  });
+  }, { signal: AbortSignal.timeout(PARSE_TIMEOUT_MS) });
   return JSON.parse(response.output_text);
 }
 
@@ -116,38 +127,66 @@ async function extractComments(pdf: Buffer, filename: string): Promise<ParsedLet
  * Extracts the comments from an uploaded letter and stores them. Runs in the
  * background after the upload responds; the outcome is recorded on the letter's
  * parseStatus, and a failure leaves the team to add comments by hand.
+ * `startedAt` is the letter's parseStartedAt for this attempt.
  */
-export async function parseCommentLetter(letterId: string) {
+export async function parseCommentLetter(letterId: string, startedAt: Date) {
+  // The outcome is recorded only while this attempt still owns the letter: not
+  // once a stalled attempt has been restarted, or the letter removed.
+  const owned = { documentId: letterId, parseStatus: "processing", parseStartedAt: startedAt } as const;
   try {
     const document = await db.document.findUniqueOrThrow({ where: { id: letterId } });
     const pdf = await fs.readFile(path.join(UPLOADS_DIR, document.filePath!));
     const parsed = await extractComments(pdf, document.name);
 
-    await db.$transaction([
-      db.comment.createMany({
-        data: parsed.comments.map((comment, i) => ({
-          ...comment,
-          letterId,
-          position: i + 1,
-        })),
-      }),
-      db.commentLetter.update({
-        where: { documentId: letterId },
+    await db.$transaction(async (tx) => {
+      const { count } = await tx.commentLetter.updateMany({
+        where: owned,
         data: {
           parseStatus: "done",
           letterDate: parseDay(parsed.letterDate),
           reviewerName: parsed.reviewerName,
         },
-      }),
-    ]);
+      });
+      if (count === 0) return;
+      await tx.comment.createMany({
+        data: parsed.comments.map((comment, i) => ({
+          ...comment,
+          letterId,
+          position: i + 1,
+        })),
+      });
+    });
   } catch (error) {
     console.error(`Parsing comment letter ${letterId} failed:`, error);
-    await db.commentLetter.update({
-      where: { documentId: letterId },
+    await db.commentLetter.updateMany({
+      where: owned,
       data: {
         parseStatus: "failed",
         parseError: error instanceof Error ? error.message : String(error),
       },
     });
   }
+}
+
+/**
+ * Restarts a parse that stopped without finishing. Claiming the letter first
+ * means only one request restarts it, and the stalled attempt can no longer
+ * record an outcome.
+ */
+export async function resumeStalledParse(
+  letter: Pick<CommentLetter, "documentId" | "parseStatus" | "parseStartedAt">
+) {
+  if (letter.parseStatus !== "processing") return;
+  if (Date.now() - letter.parseStartedAt.getTime() < STALLED_AFTER_MS) return;
+
+  const startedAt = new Date();
+  const { count } = await db.commentLetter.updateMany({
+    where: {
+      documentId: letter.documentId,
+      parseStatus: "processing",
+      parseStartedAt: letter.parseStartedAt,
+    },
+    data: { parseStartedAt: startedAt },
+  });
+  if (count > 0) after(() => parseCommentLetter(letter.documentId, startedAt));
 }

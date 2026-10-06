@@ -26,6 +26,7 @@ export async function POST(
   }
 
   const filePath = await saveUpload(file, `letter-${approval.id}`);
+  const now = new Date();
   const document = await db.$transaction(async (tx) => {
     // Moving to comments first claims the approval: a second letter uploaded at
     // the same time waits on this row, then finds it moved and isn't recorded
@@ -48,8 +49,8 @@ export async function POST(
         type: "comment_letter",
         name: file.name,
         filePath,
-        uploadedAt: new Date(),
-        commentLetter: { create: { round } },
+        uploadedAt: now,
+        commentLetter: { create: { round, parseStartedAt: now } },
       },
     });
   });
@@ -57,7 +58,7 @@ export async function POST(
     return fail(409, "Comment letters can only be added while the approval is submitted");
   }
 
-  after(() => parseCommentLetter(document.id));
+  after(() => parseCommentLetter(document.id, now));
 
   return NextResponse.json(document, { status: 201 });
 }

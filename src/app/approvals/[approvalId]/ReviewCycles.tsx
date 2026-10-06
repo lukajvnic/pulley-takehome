@@ -11,6 +11,7 @@ import { RemoveFileButton } from "@/components/RemoveFileButton";
 import { UploadButton } from "@/components/UploadButton";
 import { LABEL, LINK } from "@/components/styles";
 import { longDate, responseLetterFileName } from "@/lib/format";
+import { resumeStalledParse } from "@/lib/parse-comment-letter";
 import {
   describeFile,
   hasFile,
@@ -33,6 +34,10 @@ export async function ReviewCycles({ approval }: { approval: ApprovalWithDocs })
     loadLetters(approval.id),
     loadMembers(approval.permit.projectId),
   ]);
+  // The page polls while a letter is being read (see AutoRefresh), so it's
+  // also where a parse that stopped partway, e.g. on a server restart, is
+  // started again.
+  await Promise.all(letters.map((letter) => resumeStalledParse(letter)));
   const letterForRound = new Map(letters.map((letter) => [letter.round, letter]));
 
   // Uploaded package files, which responses can reference.

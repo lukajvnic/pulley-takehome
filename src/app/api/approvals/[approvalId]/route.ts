@@ -5,7 +5,6 @@ import { renderResponseLetter } from "@/lib/response-letter";
 import { findOpenLetter, recordSubmission } from "@/lib/submissions";
 import { saveGeneratedPdf } from "@/lib/storage";
 import { fail } from "@/lib/http";
-import { plural } from "@/lib/format";
 
 // Simplistic status changes: any status can move to any other status.
 export async function PATCH(
@@ -27,15 +26,6 @@ export async function PATCH(
   const submitting = status === "submitted" && approval.status !== "submitted";
   const responding = submitting && approval.status === "comments";
   const now = new Date();
-
-  // The checklist is the initial package, filled while preparing. Files still
-  // missing from it would never go out with any submission.
-  if (submitting && approval.status === "preparing") {
-    const missing = await db.submittalDocument.count({
-      where: { status: "needed", document: { approvalId: approval.id } },
-    });
-    if (missing > 0) return fail(409, `${plural(missing, "document")} still outstanding`);
-  }
 
   // A response goes out with its letter, generated once more from the final
   // responses and stored as the copy that was sent. Rendering happens before

@@ -140,14 +140,15 @@ model SubmittalDocument {
 
 // A comment letter from the jurisdiction's review N (its `round`), on submission N.
 model CommentLetter {
-  documentId   String      @id
-  round        Int
-  letterDate   DateTime?
-  reviewerName String?
-  parseStatus  ParseStatus @default(processing)
-  parseError   String?
-  document     Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  comments     Comment[]
+  documentId     String      @id
+  round          Int
+  letterDate     DateTime?
+  reviewerName   String?
+  parseStatus    ParseStatus @default(processing)
+  parseStartedAt DateTime    @default(now()) // when the current parse attempt began
+  parseError     String?
+  document       Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  comments       Comment[]
 }
 
 model Comment {

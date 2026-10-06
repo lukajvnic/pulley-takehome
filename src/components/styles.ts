@@ -11,6 +11,8 @@ export const LINK = `text-accent hover:text-accent-hover ${FOCUS_RING}`;
 const BUTTON = `inline-flex h-9 flex-none cursor-pointer items-center gap-2 rounded-md px-3 whitespace-nowrap text-small font-medium disabled:cursor-default disabled:opacity-50 ${FOCUS_RING}`;
 export const SECONDARY_BUTTON = `${BUTTON} border border-line-strong bg-white text-ink`;
 export const PRIMARY_BUTTON = `${BUTTON} bg-accent text-white hover:bg-accent-hover`;
+/** Minor actions beside the main ones, e.g. undo. */
+export const QUIET_BUTTON = `${BUTTON} text-ink-secondary hover:text-ink`;
 
 export const INPUT = `w-full rounded-md border border-line-strong bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-placeholder ${FOCUS_RING}`;
 

@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ApprovalStatus } from "@prisma/client";
+import { SpinnerIcon, UndoIcon } from "@/components/icons";
 import { UploadButton } from "@/components/UploadButton";
-import { PRIMARY_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
+import { PRIMARY_BUTTON, QUIET_BUTTON, SECONDARY_BUTTON } from "@/components/styles";
 import { flushPendingSaves } from "@/lib/pending-saves";
+import { errorOf } from "@/lib/requests";
 import { useDismiss } from "@/lib/use-dismiss";
 
 type Action = {
@@ -29,6 +31,14 @@ const actions: Record<ApprovalStatus, Action[]> = {
   approved: [],
 };
 
+// What Undo takes back from each status (see /api/approvals/:id/undo).
+const undoLabels: Record<ApprovalStatus, string | null> = {
+  preparing: null,
+  submitted: "Undo the submission",
+  comments: "Remove the comment letter",
+  approved: "Undo the approval",
+};
+
 export function StageActions({
   approvalId,
   status,
@@ -37,15 +47,19 @@ export function StageActions({
   status: ApprovalStatus;
 }) {
   const router = useRouter();
-  const [pending, setPending] = useState<ApprovalStatus | null>(null);
+  const [pending, setPending] = useState<ApprovalStatus | "undo" | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Set when the server holds a submission back over unanswered corrections.
   const [unanswered, setUnanswered] = useState<{ next: ApprovalStatus; count: number } | null>(
     null
   );
+  // Removing a comment letter deletes the team's responses, so it asks first.
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const area = useRef<HTMLDivElement>(null);
   const submitButton = useRef<HTMLButtonElement>(null);
+  const undoButton = useRef<HTMLButtonElement>(null);
   useDismiss(!!unanswered, area, submitButton, () => setUnanswered(null));
+  useDismiss(confirmUndo, area, undoButton, () => setConfirmUndo(false));
 
   async function move(next: ApprovalStatus, confirmUnanswered = false) {
     setPending(next);
@@ -72,8 +86,24 @@ export function StageActions({
     router.refresh();
   }
 
+  async function undo() {
+    setPending("undo");
+    setError(null);
+    const res = await fetch(`/api/approvals/${approvalId}/undo`, { method: "POST" }).catch(
+      () => null
+    );
+    setPending(null);
+    setConfirmUndo(false);
+    if (!res?.ok) {
+      setError((await errorOf(res)) ?? "Couldn't undo. Please try again.");
+      return;
+    }
+    router.refresh();
+  }
+
   const available = actions[status];
-  if (available.length === 0) return null;
+  const undoLabel = undoLabels[status];
+  if (available.length === 0 && !undoLabel) return null;
 
   return (
     <div ref={area} className="relative flex items-center gap-2">
@@ -81,6 +111,24 @@ export function StageActions({
         <span role="alert" className="text-small text-status-open-ink">
           {error}
         </span>
+      )}
+      {undoLabel && (
+        <button
+          ref={undoButton}
+          type="button"
+          disabled={pending !== null}
+          onClick={() => {
+            setUnanswered(null);
+            if (status === "comments") setConfirmUndo(true);
+            else undo();
+          }}
+          aria-label={undoLabel}
+          title={undoLabel}
+          aria-expanded={status === "comments" ? confirmUndo : undefined}
+          className={QUIET_BUTTON}
+        >
+          {pending === "undo" ? <SpinnerIcon size={16} /> : <UndoIcon />}
+        </button>
       )}
       {available.map((action) =>
         action.uploadLetter ? (
@@ -97,7 +145,10 @@ export function StageActions({
             ref={action.primary ? submitButton : undefined}
             type="button"
             disabled={pending !== null}
-            onClick={() => move(action.next)}
+            onClick={() => {
+              setConfirmUndo(false);
+              move(action.next);
+            }}
             aria-expanded={action.primary && unanswered ? true : undefined}
             className={action.primary ? PRIMARY_BUTTON : SECONDARY_BUTTON}
           >
@@ -107,41 +158,83 @@ export function StageActions({
       )}
 
       {unanswered && (
-        <div
-          role="alertdialog"
-          aria-labelledby="unanswered-title"
-          aria-describedby="unanswered-body"
-          className="absolute top-full right-0 z-40 mt-2 w-80 rounded-lg border border-line-strong bg-white p-4 shadow-popover"
-        >
-          <p id="unanswered-title" className="text-sm font-semibold">
-            {unanswered.count === 1
+        <ConfirmDialog
+          id="unanswered"
+          title={
+            unanswered.count === 1
               ? "1 correction still needs a response"
-              : `${unanswered.count} corrections still need a response`}
-          </p>
-          <p id="unanswered-body" className="mt-1 text-small text-ink-secondary">
-            Corrections that aren&apos;t marked completed go out as they are. Any without a
-            written response read &ldquo;No response provided.&rdquo; in the letter.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              autoFocus
-              onClick={() => setUnanswered(null)}
-              className={SECONDARY_BUTTON}
-            >
-              Keep working
-            </button>
-            <button
-              type="button"
-              disabled={pending !== null}
-              onClick={() => move(unanswered.next, true)}
-              className={PRIMARY_BUTTON}
-            >
-              {pending ? "Submitting…" : "Submit anyway"}
-            </button>
-          </div>
-        </div>
+              : `${unanswered.count} corrections still need a response`
+          }
+          cancelLabel="Keep working"
+          confirmLabel={pending ? "Submitting…" : "Submit anyway"}
+          busy={pending !== null}
+          onCancel={() => setUnanswered(null)}
+          onConfirm={() => move(unanswered.next, true)}
+        >
+          Corrections that aren&apos;t marked completed go out as they are. Any without a written
+          response read &ldquo;No response provided.&rdquo; in the letter.
+        </ConfirmDialog>
       )}
+
+      {confirmUndo && (
+        <ConfirmDialog
+          id="undo"
+          title="Remove the comment letter?"
+          cancelLabel="Keep it"
+          confirmLabel={pending ? "Removing…" : "Remove letter"}
+          busy={pending !== null}
+          onCancel={() => setConfirmUndo(false)}
+          onConfirm={undo}
+        >
+          Its comments and any responses written so far are deleted, and the approval goes back to
+          Submitted.
+        </ConfirmDialog>
+      )}
+    </div>
+  );
+}
+
+/** Asks to confirm an action, in a popover under the buttons. */
+function ConfirmDialog({
+  id,
+  title,
+  cancelLabel,
+  confirmLabel,
+  busy,
+  onCancel,
+  onConfirm,
+  children,
+}: {
+  id: string;
+  title: string;
+  cancelLabel: string;
+  confirmLabel: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="alertdialog"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-body`}
+      className="absolute top-full right-0 z-40 mt-2 w-80 rounded-lg border border-line-strong bg-white p-4 shadow-popover"
+    >
+      <p id={`${id}-title`} className="text-sm font-semibold">
+        {title}
+      </p>
+      <p id={`${id}-body`} className="mt-1 text-small text-ink-secondary">
+        {children}
+      </p>
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" autoFocus onClick={onCancel} className={SECONDARY_BUTTON}>
+          {cancelLabel}
+        </button>
+        <button type="button" disabled={busy} onClick={onConfirm} className={PRIMARY_BUTTON}>
+          {confirmLabel}
+        </button>
+      </div>
     </div>
   );
 }

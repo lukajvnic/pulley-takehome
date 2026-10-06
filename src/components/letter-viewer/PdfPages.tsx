@@ -35,6 +35,7 @@ export default function PdfPages({
   const [numPages, setNumPages] = useState(0);
   const [highlight, setHighlight] = useState<Highlight | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [scanned, setScanned] = useState(false);
 
   // Pages fit the column: measured as soon as it mounts (a resize observer alone
   // never fires in a background tab), then kept in step with resizes.
@@ -48,8 +49,6 @@ export default function PdfPages({
   }, []);
 
   async function onLoad(pdf: PDFDocumentProxy) {
-    setNumPages(pdf.numPages);
-    if (!target) return;
     const pages = await Promise.all(
       Array.from({ length: pdf.numPages }, async (_, i) => {
         const content = await (await pdf.getPage(i + 1)).getTextContent();
@@ -57,6 +56,14 @@ export default function PdfPages({
         return content.items.flatMap((item) => ("str" in item ? [item.str] : []));
       })
     );
+    setNumPages(pdf.numPages);
+    // A scan has no text to highlight, and PDF.js can't draw some scans' images
+    // (fax encodings need its wasm decoders), so the browser's viewer shows it.
+    if (pages.every((items) => items.every((str) => !str.trim()))) {
+      setScanned(true);
+      return;
+    }
+    if (!target) return;
     const found = locateText(pages, target.text);
     setHighlight(found);
     setNotFound(!found);
@@ -92,13 +99,33 @@ export default function PdfPages({
     document.getElementById(`letter-page-${fallbackPage}`)?.scrollIntoView({ block: "start" });
   }, [notFound, numPages, fallbackPage]);
 
+  const showingPage = target?.page
+    ? `Showing page ${fallbackPage}, where it starts.`
+    : "Showing the first page.";
+
+  if (scanned) {
+    return (
+      <div className="flex flex-col gap-4">
+        {target && (
+          <p className="rounded-lg border border-line bg-white px-4 py-3 text-small text-ink-secondary">
+            This letter is a scan, so the comment can&apos;t be highlighted. {showingPage}
+          </p>
+        )}
+        <iframe
+          src={`${fileUrl}#page=${fallbackPage}`}
+          title="Comment letter"
+          className="h-screen w-full rounded-lg border border-line bg-white"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {notFound && (
         <p className="rounded-lg border border-line bg-white px-4 py-3 text-small text-ink-secondary">
           Couldn&apos;t find this comment&apos;s text in the PDF. It may be a scanned letter, or the
-          comment was edited after parsing.{" "}
-          {target?.page ? `Showing page ${fallbackPage}, where it starts.` : "Showing the first page."}
+          comment was edited after parsing. {showingPage}
         </p>
       )}
 

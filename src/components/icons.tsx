@@ -53,7 +53,15 @@ export const ChevronDownIcon = ({ size = 14, className }: IconProps) => (
   </Icon>
 );
 
-export const FileIcon = ({ size = 18, className }: IconProps) => (
+/** A curved arrow back, for undo. */
+export const UndoIcon = ({ size = 16, className }: IconProps) => (
+  <Icon size={size} strokeWidth={2} className={className}>
+    <path d="M9 14L4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  </Icon>
+);
+
+export const FileIcon =({ size = 18, className }: IconProps) => (
   <Icon size={size} strokeWidth={1.6} className={className}>
     <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
     <path d="M14 3v5h5" />
