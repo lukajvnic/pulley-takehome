@@ -81,7 +81,7 @@ However, `kind` (with type `required_upload`) and `status` (with types `needed` 
 
 Additionally, comment letter documents have some fields that the original document wouldn't need, e.g. `parseStatus`, `round`, etc.
 
-For this reason, I created two new models, `SubmittalDocument` and `CommentLetter` to differentiate between the two types of documents. Additionally, model `Comment` was also created to keep track of all the fields parsed from the document by AI. `Comment` is separate from `CommentLetter` because one `CommentLetter` may contain many `Comment`.
+For this reason, I created two new models, `SubmittalDocument` and `CommentLetter` to differentiate between the two types of documents. Additionally, model `Comment` was also created to keep track of all the fields parsed from the document by AI. `Comment` is separate from `CommentLetter` because one `CommentLetter` may contain many `Comment`s.
 
 In addition to this, since in a regular process planners may submit multiple rounds/cycles of applications in response to comments, we now need to keep track of submissions separately to distinguish each package sent for review.
 
